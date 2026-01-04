@@ -1,0 +1,6 @@
+{
+  "commitment": "{\"v\":\"4\",\"algo\":\"hmac-sha256\",\"ctx\":\"cHNpLWNvbW1pdDp2NA\",\"salt\":\"xXmQH7FOaxSU0NurNSCBvw\",\"mac\":\"IGcS7hCYJ-9yRJT4o1GoeRJM0tGoLGbZBqNOncQjzQg\"}",
+  "key_b64": "SPSAPpHGHAwBWfyTvs7-fkMW8noGGwEhdb0g0aiQGCc",
+  "message_preview": "hello world",
+  "canonicalized": true
+}
