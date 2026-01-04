@@ -1,0 +1,27 @@
+{
+  "version": "1.0",
+  "description": "Test vectors for PSI-COMMIT v1.0",
+  "vectors": [
+    {
+      "name": "basic_commitment",
+      "message": "hello world",
+      "key": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "context": "test",
+      "nonce": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+    },
+    {
+      "name": "empty_message",
+      "message": "",
+      "key": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "context": "default",
+      "nonce": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "unicode_message",
+      "message": "Hello 世界 🌍",
+      "key": "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      "context": "unicode-test",
+      "nonce": "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    }
+  ]
+}
