@@ -1,6 +1,6 @@
 """PSI-COMMIT: Cryptographic commitment scheme for verifiable decisions."""
 
-from .core import seal, verify, seal_with_passphrase, serialize_commitment, deserialize_commitment
+from .core import seal, verify, canon, log, _b64e, _b64d
 
-__version__ = "1.0.0"
-__all__ = ["seal", "verify", "seal_with_passphrase", "serialize_commitment", "deserialize_commitment"]
+__version__ = "4.0.0"
+__all__ = ["seal", "verify", "canon", "log", "_b64e", "_b64d"]
