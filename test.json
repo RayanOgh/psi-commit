@@ -1,0 +1,11 @@
+{
+  "commitment": {
+    "v": 1,
+    "alg": "HMAC-SHA256",
+    "domain": "psi-commit.v1.default",
+    "nonce": "61bda68c106ae828165ba9e39877a2d7d348c5299693125685c7936601513381",
+    "mac": "ca66d4ec38dd650aee2593dedf4617ba34d0ba4a7450664ba9757023637a0664"
+  },
+  "key": "d6a438e079b7384b700c50db5058805debdb1252a8230c47e9a32079f76d65e9",
+  "message_preview": "Hello World"
+}
