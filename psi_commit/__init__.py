@@ -12,6 +12,17 @@ from .core import (
 
 from .log import CommitmentLog
 
+# OpenTimestamps is optional
+try:
+    from .timestamp import (
+        create_timestamp,
+        verify_timestamp,
+        info_timestamp
+    )
+    HAS_OPENTIMESTAMPS = True
+except ImportError:
+    HAS_OPENTIMESTAMPS = False
+
 __version__ = "1.0.0"
 __all__ = [
     "seal",
@@ -23,3 +34,6 @@ __all__ = [
     "log",
     "CommitmentLog"
 ]
+
+if HAS_OPENTIMESTAMPS:
+    __all__.extend(["create_timestamp", "verify_timestamp", "info_timestamp"])

@@ -1,0 +1,11 @@
+{
+  "commitment": {
+    "v": 1,
+    "alg": "HMAC-SHA256",
+    "domain": "psi-commit.v1.default",
+    "nonce": "43e661544de289f0beca31b61a04d779513b87b4e37f89e6897abe96677fbca8",
+    "mac": "3a58bc8b8a3cad3d0b4b3600cd23cbe2f8e66f85cfa778eb8b595a768aae9df8"
+  },
+  "key_hex": "f9311978852ecab9fe15cd7dfaf1de844aa97c7dfe908e7d93b43f494674e79b",
+  "message_preview": "This is a test prediction made on January 5, 2026"
+}
