@@ -10,6 +10,8 @@ from .core import (
     log
 )
 
+from .log import CommitmentLog
+
 __version__ = "1.0.0"
 __all__ = [
     "seal",
@@ -18,5 +20,6 @@ __all__ = [
     "serialize_commitment",
     "deserialize_commitment",
     "canon",
-    "log"
+    "log",
+    "CommitmentLog"
 ]
