@@ -1,0 +1,6 @@
+jcs>=0.2.1
+click>=8.0.0
+argon2-cffi>=21.0.0
+opentimestamps-client>=0.7.0
+pytest>=9.0.0
+hypothesis>=6.0.0
