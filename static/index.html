@@ -1921,16 +1921,10 @@ function escapeHtml(str) {
 
 // ── INIT ──
 document.addEventListener('DOMContentLoaded', async () => {
-  // Check for existing session
-  const { data: { session } } = await sb.auth.getSession();
-  if (session?.user) {
-    currentUser = session.user;
-    await ensureProfile(session.user);
-    updateAuthUI(session.user);
-  }
 
-  // Listen for auth changes
+  // onAuthStateChange fires immediately with current session AND after Google redirect
   sb.auth.onAuthStateChange(async (event, session) => {
+    console.log('[AUTH] event:', event, 'user:', session?.user?.email);
     if (session?.user) {
       currentUser = session.user;
       await ensureProfile(session.user);
