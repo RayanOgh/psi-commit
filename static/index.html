@@ -284,6 +284,16 @@
     background: var(--mid);
   }
 
+  #security {
+    padding: 7rem 2.5rem;
+    border-top: 1px solid var(--border);
+    background: var(--black);
+  }
+
+  @media (max-width: 768px) {
+    #security .trust-grid { grid-template-columns: 1fr !important; }
+  }
+
   .cases-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -694,6 +704,7 @@
     <li><a href="#app">Commit</a></li>
     <li><a href="#app">Verify</a></li>
     <li><a href="#app">Wall</a></li>
+    <li><a href="#security">Security</a></li>
     <li><a href="https://github.com/RayanOgh/psi-commit" target="_blank">GitHub</a></li>
   </ul>
 </nav>
@@ -778,6 +789,113 @@
     </div>
   </div>
 </section>
+
+<!-- SECURITY -->
+<section id="security">
+  <div class="section-label">Trust Model</div>
+  <h2 class="section-title">DON'T TRUST US.<br>VERIFY EVERYTHING.</h2>
+
+  <div style="max-width:820px;margin:3rem auto 0">
+
+    <!-- The core promise -->
+    <div style="border:1px solid var(--accent);padding:2rem;margin-bottom:2rem;position:relative">
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;margin-bottom:1rem">CORE GUARANTEE</div>
+      <p style="font-size:1.15rem;line-height:1.8;color:var(--white)">
+        We cannot forge your commitments. We cannot change your timestamps. We cannot lie about when you committed — even if we wanted to. The math and Bitcoin make it impossible.
+      </p>
+    </div>
+
+    <!-- Three trust pillars -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border);margin-bottom:2rem">
+
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">01 / YOUR KEY</div>
+        <div style="font-family:var(--display);font-size:1.4rem;margin-bottom:0.75rem">NEVER LEAVES<br>YOUR DEVICE</div>
+        <p style="font-size:0.82rem;color:#999;line-height:1.7">Your secret key is generated in your browser and never sent to our server. We store only the MAC — a mathematical fingerprint. Without your key, the message is permanently hidden.</p>
+      </div>
+
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">02 / THE MATH</div>
+        <div style="font-family:var(--display);font-size:1.4rem;margin-bottom:0.75rem">HMAC-SHA256<br>IS BINDING</div>
+        <p style="font-size:0.82rem;color:#999;line-height:1.7">HMAC-SHA256 is a one-way function. Given a MAC, it is computationally impossible to find a different message that produces the same fingerprint — even with all the computing power on Earth.</p>
+      </div>
+
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">03 / BITCOIN</div>
+        <div style="font-family:var(--display);font-size:1.4rem;margin-bottom:0.75rem">TIMESTAMP IS<br>PERMANENT</div>
+        <p style="font-size:0.82rem;color:#999;line-height:1.7">Every commitment is anchored to the Bitcoin blockchain via OpenTimestamps. Bitcoin is maintained by 10,000+ independent computers worldwide. Nobody controls it — not us, not you, not anyone.</p>
+      </div>
+
+    </div>
+
+    <!-- How verification works -->
+    <div style="border:1px solid var(--border);padding:2rem;margin-bottom:2rem">
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;margin-bottom:1.5rem">HOW VERIFICATION WORKS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem">
+        <div>
+          <div style="font-family:var(--mono);font-size:0.72rem;color:var(--white);margin-bottom:0.5rem">When you commit:</div>
+          <ol style="font-size:0.82rem;color:#999;line-height:2;padding-left:1.2rem">
+            <li>Your browser generates a secret key</li>
+            <li>HMAC-SHA256 combines key + message → MAC</li>
+            <li>Only the MAC is sent to our server</li>
+            <li>MAC is anchored to Bitcoin via OTS</li>
+            <li>Your key and message stay on your device</li>
+          </ol>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:0.72rem;color:var(--white);margin-bottom:0.5rem">When you reveal:</div>
+          <ol style="font-size:0.82rem;color:#999;line-height:2;padding-left:1.2rem">
+            <li>You provide your original message + key</li>
+            <li>Server recomputes HMAC independently</li>
+            <li>If it matches the stored MAC — verified</li>
+            <li>Bitcoin block proves the MAC existed before</li>
+            <li>Anyone can verify independently</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- Open source + independent verify -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);margin-bottom:2rem">
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">OPEN SOURCE</div>
+        <p style="font-size:0.82rem;color:#999;line-height:1.7;margin-bottom:1rem">Every line of code is public on GitHub. You can audit exactly what our server does, run it yourself, or use the Python library directly without ever touching our website.</p>
+        <a href="https://github.com/RayanOgh/psi-commit" target="_blank" style="font-family:var(--mono);font-size:0.72rem;color:var(--accent);text-decoration:none">View source code ↗</a>
+      </div>
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">INDEPENDENT VERIFICATION</div>
+        <p style="font-size:0.82rem;color:#999;line-height:1.7;margin-bottom:1rem">Bitcoin timestamps can be verified by anyone at opentimestamps.org using only your receipt file. No account needed. No trust in us required. The blockchain speaks for itself.</p>
+        <a href="https://opentimestamps.org" target="_blank" style="font-family:var(--mono);font-size:0.72rem;color:var(--accent);text-decoration:none">Verify at opentimestamps.org ↗</a>
+      </div>
+    </div>
+
+    <!-- What we can and cannot do -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)">
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:#ff4444;letter-spacing:0.15em;margin-bottom:1rem">WHAT WE CANNOT DO</div>
+        <ul style="font-size:0.82rem;color:#999;line-height:2.2;list-style:none">
+          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Read your message before you reveal it</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Change what you committed to</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Backdate or alter your timestamp</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Forge a commitment on your behalf</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Prevent you from verifying independently</li>
+        </ul>
+      </div>
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;margin-bottom:1rem">WHAT WE DO</div>
+        <ul style="font-size:0.82rem;color:#999;line-height:2.2;list-style:none">
+          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Store your public MAC and timestamp</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Submit your MAC to Bitcoin via OTS</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Verify your key matches on reveal</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Maintain the public wall</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Keep the code open source forever</li>
+        </ul>
+      </div>
+    </div>
+
+  </div>
+</section>
+
 
 <!-- APP -->
 <section id="app">
