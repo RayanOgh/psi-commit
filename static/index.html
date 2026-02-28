@@ -280,6 +280,58 @@
     object-fit: cover;
   }
 
+  .profile-bio {
+    font-size: 0.88rem;
+    color: #999;
+    margin-top: 0.5rem;
+    max-width: 480px;
+    line-height: 1.6;
+  }
+
+  .comment-item {
+    padding: 0.85rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .comment-item:last-child { border-bottom: none; }
+
+  .comment-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .comment-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .comment-username {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--accent);
+    cursor: pointer;
+  }
+
+  .comment-username:hover { text-decoration: underline; }
+
+  .comment-time {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+  .comment-text {
+    font-size: 0.88rem;
+    color: #ccc;
+    line-height: 1.5;
+    padding-left: 1.75rem;
+  }
+
   .btn-follow {
     font-family: var(--mono);
     font-size: 0.72rem;
@@ -1070,6 +1122,52 @@
   </div>
 </div>
 
+<!-- EDIT PROFILE MODAL -->
+<div class="modal-overlay" id="edit-profile-modal">
+  <div class="modal" style="max-width:480px">
+    <button class="modal-close" onclick="closeEditProfile()">✕</button>
+    <div class="modal-title">EDIT PROFILE</div>
+    <div class="modal-sub">Update your public profile.</div>
+    <div class="field-group">
+      <label class="field-label">Username</label>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <span style="font-family:var(--mono);font-size:0.85rem;color:var(--muted)">@</span>
+        <input type="text" id="edit-username" oninput="validateEditUsername()">
+      </div>
+      <div style="font-family:var(--mono);font-size:0.65rem;margin-top:0.4rem" id="edit-username-feedback"></div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Display Name</label>
+      <input type="text" id="edit-displayname" placeholder="Your full name">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Bio</label>
+      <textarea id="edit-bio" placeholder="Tell people a bit about yourself..." style="min-height:80px"></textarea>
+    </div>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="saveProfile()" id="save-profile-btn">Save Changes →</button>
+      <button class="btn btn-outline" style="color:#ff6060;border-color:#ff6060" onclick="confirmDeleteAccount()">Delete Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- COMMENTS MODAL -->
+<div class="modal-overlay" id="comments-modal">
+  <div class="modal" style="max-width:560px;max-height:80vh;overflow-y:auto">
+    <button class="modal-close" onclick="document.getElementById('comments-modal').classList.remove('open')">✕</button>
+    <div class="modal-title" style="font-size:1.4rem;margin-bottom:0.25rem">COMMENTS</div>
+    <div style="font-family:var(--mono);font-size:0.68rem;color:var(--muted);margin-bottom:1.5rem" id="comments-commitment-id"></div>
+    <div id="comments-list" style="margin-bottom:1.5rem"></div>
+    <div id="comments-input-area">
+      <textarea id="comment-input" placeholder="Add a comment..." style="min-height:70px;margin-bottom:0.75rem"></textarea>
+      <button class="btn btn-primary" onclick="submitComment()" style="font-size:0.72rem;padding:0.65rem 1.4rem">Post Comment →</button>
+    </div>
+    <div id="comments-login-prompt" style="display:none;font-family:var(--mono);font-size:0.75rem;color:var(--muted);text-align:center;padding:1rem">
+      <a onclick="openModal()" style="color:var(--accent);cursor:pointer">Sign in</a> to comment.
+    </div>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav>
   <a class="nav-logo" href="#" onclick="showMainPage()">PSI — COMMIT</a>
@@ -1107,6 +1205,7 @@
         <div>
           <div class="profile-name" id="profile-name">—</div>
           <div class="profile-handle" id="profile-handle">@—</div>
+        <div class="profile-bio" id="profile-bio"></div>
         </div>
         <div id="profile-action-btns" style="margin-top:0.5rem"></div>
       </div>
@@ -1130,9 +1229,14 @@
       </div>
     </div>
   </div>
-  <div class="profile-tabs">
-    <button class="profile-tab active" onclick="switchProfileTab('public', this)">Public Commitments</button>
-    <button class="profile-tab" onclick="switchProfileTab('private', this)">Private Commitments</button>
+  <div class="profile-tabs" style="display:flex;justify-content:space-between;align-items:center">
+    <div style="display:flex">
+      <button class="profile-tab active" onclick="switchProfileTab('public', this)">Public Commitments</button>
+      <button class="profile-tab" onclick="switchProfileTab('private', this)">Private Commitments</button>
+    </div>
+    <div id="edit-profile-btn-wrap" style="display:none;padding-right:1.5rem">
+      <button class="btn-login" onclick="openEditProfile()" style="font-size:0.68rem;padding:0.4rem 1rem">Edit Profile</button>
+    </div>
   </div>
   <div class="profile-content">
     <div class="profile-section active" id="tab-public">
@@ -1687,6 +1791,14 @@ async function loadProfileData(userId = null) {
   document.getElementById('stat-followers').textContent = profile.followers_count || 0;
   document.getElementById('stat-following').textContent = profile.following_count || 0;
 
+  // Show bio if exists
+  const bioEl = document.getElementById('profile-bio');
+  if (bioEl) bioEl.textContent = profile.bio || '';
+
+  // Show/hide edit button
+  const editWrap = document.getElementById('edit-profile-btn-wrap');
+  if (editWrap) editWrap.style.display = isOwnProfile ? 'block' : 'none';
+
   // Show follow/unfollow button or nothing for own profile
   const actionBtns = document.getElementById('profile-action-btns');
   if (!isOwnProfile && currentUser) {
@@ -2073,7 +2185,11 @@ function buildWallItem(item, isOwner = false) {
       ${otsLine}
       <div class="wall-message" style="margin-top:0.6rem">${msg}</div>
       <div class="wall-meta">Context: ${item.context} · MAC: ${item.mac.substring(0,16)}...</div>
-      ${!revealed ? `<button class="btn btn-outline" style="margin-top:0.75rem;font-size:0.65rem;padding:0.4rem 0.9rem" onclick="revealItem('${item.id}')">Reveal</button>` : ''}
+      <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap">
+        ${!revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem" onclick="revealItem('${item.id}')">Reveal</button>` : ''}
+        ${revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2);border-color:var(--accent2)" onclick="openComments('${item.id}')">💬 Comments</button>` : ''}
+        ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:#ff6060;border-color:#ff6060" onclick="deleteCommitment('${item.id}')">Delete</button>` : ''}
+      </div>
     </div>
     <div><span class="wall-badge ${revealed ? 'badge-revealed' : 'badge-pending'}">${revealed ? 'Revealed' : 'Pending'}</span></div>
   </div>`;
@@ -2183,6 +2299,185 @@ async function revealItem(commitmentId) {
   } catch(e) {
     alert('Error revealing commitment');
   }
+}
+
+// ── EDIT PROFILE ──
+function openEditProfile() {
+  if (!currentProfile) return;
+  document.getElementById('edit-username').value = currentProfile.username || '';
+  document.getElementById('edit-displayname').value = currentProfile.full_name || '';
+  document.getElementById('edit-bio').value = currentProfile.bio || '';
+  document.getElementById('edit-username-feedback').textContent = '';
+  document.getElementById('edit-profile-modal').classList.add('open');
+}
+
+function closeEditProfile() {
+  document.getElementById('edit-profile-modal').classList.remove('open');
+}
+
+function validateEditUsername() {
+  const u = document.getElementById('edit-username').value.trim().toLowerCase();
+  const feedback = document.getElementById('edit-username-feedback');
+  if (!u) { feedback.textContent = ''; return; }
+  if (u.length < 3) { feedback.textContent = 'At least 3 characters.'; feedback.style.color = '#ff6060'; }
+  else if (u.length > 20) { feedback.textContent = 'Max 20 characters.'; feedback.style.color = '#ff6060'; }
+  else if (!/^[a-z0-9_]+$/.test(u)) { feedback.textContent = 'Only letters, numbers, underscores.'; feedback.style.color = '#ff6060'; }
+  else { feedback.textContent = '✓ Looks good'; feedback.style.color = 'var(--accent)'; }
+}
+
+async function saveProfile() {
+  const btn = document.getElementById('save-profile-btn');
+  const username = document.getElementById('edit-username').value.trim().toLowerCase();
+  const fullName = document.getElementById('edit-displayname').value.trim();
+  const bio = document.getElementById('edit-bio').value.trim();
+
+  if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+    document.getElementById('edit-username-feedback').textContent = 'Invalid username.';
+    document.getElementById('edit-username-feedback').style.color = '#ff6060';
+    return;
+  }
+
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+
+  // Check uniqueness if username changed
+  if (username !== currentProfile.username) {
+    const { data: taken } = await sb.from('profiles').select('id').eq('username', username).single();
+    if (taken) {
+      document.getElementById('edit-username-feedback').textContent = 'Username taken.';
+      document.getElementById('edit-username-feedback').style.color = '#ff6060';
+      btn.textContent = 'Save Changes →';
+      btn.disabled = false;
+      return;
+    }
+  }
+
+  const { data: updated, error } = await sb
+    .from('profiles')
+    .update({ username, full_name: fullName, bio })
+    .eq('id', currentUser.id)
+    .select()
+    .single();
+
+  if (error) {
+    alert('Error saving profile: ' + error.message);
+    btn.textContent = 'Save Changes →';
+    btn.disabled = false;
+    return;
+  }
+
+  currentProfile = updated;
+  document.getElementById('nav-username').textContent = '@' + username;
+  closeEditProfile();
+  await loadProfileData();
+
+  btn.textContent = 'Save Changes →';
+  btn.disabled = false;
+}
+
+async function confirmDeleteAccount() {
+  if (!confirm('Are you sure you want to delete your account? This cannot be undone.')) return;
+  if (!confirm('All your commitments will remain on the wall but will be unlinked from your account. Confirm deletion?')) return;
+
+  await sb.from('profiles').delete().eq('id', currentUser.id);
+  await sb.auth.signOut();
+  showMainPage();
+}
+
+// ── DELETE COMMITMENT ──
+async function deleteCommitment(commitmentId) {
+  if (!confirm('Delete this commitment? It will be removed from your profile and the wall.')) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/commitment/${commitmentId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' }
+    });
+
+    if (res.ok) {
+      // Reload current view
+      if (document.getElementById('profile-page').classList.contains('active')) {
+        await loadProfileData(viewingUserId);
+      } else {
+        renderWall();
+      }
+    } else {
+      // Fallback: delete directly via Supabase if user owns it
+      await sb.from('commitments').delete().eq('id', commitmentId).eq('user_id', currentUser.id);
+      if (document.getElementById('profile-page').classList.contains('active')) {
+        await loadProfileData(viewingUserId);
+      } else {
+        renderWall();
+      }
+    }
+  } catch(e) {
+    await sb.from('commitments').delete().eq('id', commitmentId).eq('user_id', currentUser.id);
+    await loadProfileData(viewingUserId);
+  }
+}
+
+// ── COMMENTS ──
+let currentCommentsId = null;
+
+async function openComments(commitmentId) {
+  currentCommentsId = commitmentId;
+  document.getElementById('comments-commitment-id').textContent = commitmentId;
+  document.getElementById('comments-modal').classList.add('open');
+
+  if (currentUser) {
+    document.getElementById('comments-input-area').style.display = 'block';
+    document.getElementById('comments-login-prompt').style.display = 'none';
+  } else {
+    document.getElementById('comments-input-area').style.display = 'none';
+    document.getElementById('comments-login-prompt').style.display = 'block';
+  }
+
+  await loadComments(commitmentId);
+}
+
+async function loadComments(commitmentId) {
+  const { data: comments } = await sb
+    .from('comments')
+    .select('id, content, created_at, user_id, profiles(username, avatar_url, avatar_seed)')
+    .eq('commitment_id', commitmentId)
+    .order('created_at', { ascending: true });
+
+  const listEl = document.getElementById('comments-list');
+
+  if (!comments?.length) {
+    listEl.innerHTML = '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--muted);text-align:center;padding:1.5rem 0">No comments yet. Be the first.</div>';
+    return;
+  }
+
+  listEl.innerHTML = comments.map(c => {
+    const av = c.profiles?.avatar_url || getAvatarUrl(c.profiles?.avatar_seed || c.user_id);
+    const time = new Date(c.created_at).toLocaleString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+    return `<div class="comment-item">
+      <div class="comment-header">
+        <img class="comment-avatar" src="${av}" alt="">
+        <span class="comment-username" onclick="openUserProfile('${c.user_id}')">@${escapeHtml(c.profiles?.username || '')}</span>
+        <span class="comment-time">${time}</span>
+      </div>
+      <div class="comment-text">${escapeHtml(c.content)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function submitComment() {
+  if (!currentUser) { openModal(); return; }
+  const content = document.getElementById('comment-input').value.trim();
+  if (!content) return;
+
+  const { error } = await sb.from('comments').insert({
+    commitment_id: currentCommentsId,
+    user_id: currentUser.id,
+    content
+  });
+
+  if (error) { alert('Error posting comment: ' + error.message); return; }
+
+  document.getElementById('comment-input').value = '';
+  await loadComments(currentCommentsId);
 }
 
 // ── UTILS ──
