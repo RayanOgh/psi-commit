@@ -986,6 +986,27 @@
   </div>
 </div>
 
+
+<!-- USERNAME SETUP MODAL -->
+<div class="modal-overlay" id="username-modal">
+  <div class="modal">
+    <div class="modal-title">PICK A USERNAME</div>
+    <div class="modal-sub">This is your public handle on PSI-COMMIT.<br>You can change it later in your profile.</div>
+    <div style="margin-bottom:1rem">
+      <label class="field-label">Username</label>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <span style="font-family:var(--mono);font-size:0.85rem;color:var(--muted)">@</span>
+        <input type="text" id="username-input" placeholder="yourhandle" 
+          style="flex:1" 
+          oninput="validateUsername()"
+          onkeydown="if(event.key==='Enter') submitUsername()">
+      </div>
+      <div style="font-family:var(--mono);font-size:0.65rem;margin-top:0.5rem" id="username-feedback"></div>
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="submitUsername()" id="username-submit-btn">Set Username →</button>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav>
   <a class="nav-logo" href="#" onclick="showMainPage()">PSI — COMMIT</a>
@@ -1418,11 +1439,45 @@ async function ensureProfile(user) {
     return existing;
   }
 
-  // Create new profile
+  // New user — show username picker modal
+  document.getElementById('username-modal').classList.add('open');
+  // Pre-fill with a suggestion
   const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'user';
-  const username = name.toLowerCase().replace(/[^a-z0-9]/g, '') + Math.floor(Math.random() * 999);
-  const avatarSeed = user.id;
-  const avatarUrl = user.user_metadata?.avatar_url || getAvatarUrl(avatarSeed);
+  const suggested = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  document.getElementById('username-input').value = suggested;
+  validateUsername();
+  return null; // profile will be created after username is chosen
+}
+
+async function submitUsername() {
+  const user = currentUser;
+  if (!user) return;
+
+  const username = document.getElementById('username-input').value.trim().toLowerCase();
+  if (!isValidUsername(username)) return;
+
+  const btn = document.getElementById('username-submit-btn');
+  btn.textContent = 'Checking...';
+  btn.disabled = true;
+
+  // Check uniqueness
+  const { data: taken } = await sb
+    .from('profiles')
+    .select('id')
+    .eq('username', username)
+    .single();
+
+  if (taken) {
+    document.getElementById('username-feedback').textContent = 'Username taken — try another.';
+    document.getElementById('username-feedback').style.color = '#ff6060';
+    btn.textContent = 'Set Username →';
+    btn.disabled = false;
+    return;
+  }
+
+  // Create profile
+  const name = user.user_metadata?.full_name || username;
+  const avatarUrl = user.user_metadata?.avatar_url || getAvatarUrl(user.id);
 
   const { data: profile, error } = await sb
     .from('profiles')
@@ -1431,18 +1486,46 @@ async function ensureProfile(user) {
       username,
       full_name: name,
       avatar_url: avatarUrl,
-      avatar_seed: avatarSeed,
+      avatar_seed: user.id,
     })
     .select()
     .single();
 
   if (error) {
     console.error('Profile creation error:', error);
-    return null;
+    document.getElementById('username-feedback').textContent = 'Error creating profile. Try again.';
+    document.getElementById('username-feedback').style.color = '#ff6060';
+    btn.textContent = 'Set Username →';
+    btn.disabled = false;
+    return;
   }
 
   currentProfile = profile;
-  return profile;
+  document.getElementById('username-modal').classList.remove('open');
+  updateAuthUI(user);
+}
+
+function isValidUsername(u) {
+  return u.length >= 3 && u.length <= 20 && /^[a-z0-9_]+$/.test(u);
+}
+
+function validateUsername() {
+  const u = document.getElementById('username-input').value.trim().toLowerCase();
+  const feedback = document.getElementById('username-feedback');
+  if (!u) { feedback.textContent = ''; return; }
+  if (u.length < 3) {
+    feedback.textContent = 'At least 3 characters.';
+    feedback.style.color = '#ff6060';
+  } else if (u.length > 20) {
+    feedback.textContent = 'Max 20 characters.';
+    feedback.style.color = '#ff6060';
+  } else if (!/^[a-z0-9_]+$/.test(u)) {
+    feedback.textContent = 'Only letters, numbers, and underscores.';
+    feedback.style.color = '#ff6060';
+  } else {
+    feedback.textContent = '✓ Looks good';
+    feedback.style.color = 'var(--accent)';
+  }
 }
 
 // ── UPDATE UI AFTER AUTH ──
@@ -1808,7 +1891,7 @@ async function addToWall() {
     });
     if (!res.ok) throw new Error();
     btn.textContent = '✓ Added!';
-    setTimeout(() => switchTab('wall'), 600);
+    setTimeout(() => { switchTab('wall'); renderWall(); }, 600);
   } catch(e) {
     btn.textContent = 'Error — try again';
     setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
