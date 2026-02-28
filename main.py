@@ -21,13 +21,8 @@ from ots import anchor_commitment, check_ots_status
 
 # ── BACKGROUND OTS POLLER ──
 async def poll_ots_confirmations():
-    """
-    Runs every 30 minutes in the background.
-    Checks all submitted-but-unconfirmed commitments against Bitcoin.
-    Updates the database when a block is confirmed.
-    """
     while True:
-        await asyncio.sleep(30 * 60)  # wait 30 minutes
+        await asyncio.sleep(30 * 60)
         try:
             print("[OTS] Polling for Bitcoin confirmations...")
             pending = await db.get_pending_ots()
@@ -57,26 +52,26 @@ async def lifespan(app: FastAPI):
 # ── APP SETUP ──
 app = FastAPI(title="PSI-COMMIT API", version="1.0.0", lifespan=lifespan)
 
-# Allow your website to call the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Lock this down to your domain in production
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Serve the frontend (index.html) from the same server
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # ── MODELS ──
 class CommitmentPost(BaseModel):
-    id: str              # psc_xxxx
-    mac: str             # 64-char hex
-    nonce: str           # 64-char hex
-    context: str         # e.g. "default"
-    domain: str          # e.g. "psi-commit.v1.default"
-    timestamp: str       # ISO timestamp
+    id: str
+    mac: str
+    nonce: str
+    context: str
+    domain: str
+    timestamp: str
+    user_id: Optional[str] = None
+    visibility: Optional[str] = "public"
 
 
 class RevealPost(BaseModel):
@@ -89,22 +84,15 @@ class RevealPost(BaseModel):
 
 @app.get("/")
 async def serve_frontend():
-    """Serve the main website."""
     return FileResponse("static/index.html")
 
 
 @app.post("/api/commit")
 async def post_commitment(data: CommitmentPost):
-    """
-    Save a commitment to the wall and trigger OTS anchoring.
-    Server never receives the secret key or message — only the public MAC.
-    """
-    # Check if already exists
     existing = await db.get_commitment(data.id)
     if existing:
         return {"success": True, "id": data.id, "already_exists": True}
 
-    # Save to database
     commitment = {
         "id": data.id,
         "mac": data.mac,
@@ -112,6 +100,8 @@ async def post_commitment(data: CommitmentPost):
         "context": data.context,
         "domain": data.domain,
         "committed_at": data.timestamp,
+        "user_id": data.user_id,
+        "visibility": data.visibility or "public",
         "revealed": False,
         "revealed_message": None,
         "ots_status": "pending",
@@ -120,8 +110,6 @@ async def post_commitment(data: CommitmentPost):
     }
 
     await db.insert_commitment(commitment)
-
-    # Trigger OTS anchoring in background (don't make user wait)
     asyncio.create_task(anchor_commitment(data.id, data.mac))
 
     return {
@@ -133,31 +121,32 @@ async def post_commitment(data: CommitmentPost):
 
 @app.get("/api/wall")
 async def get_wall(limit: int = 50, offset: int = 0):
-    """Return all public wall commitments, newest first."""
+    """Return public wall commitments only."""
     commitments = await db.get_wall(limit=limit, offset=offset)
     return {"commitments": commitments, "total": len(commitments)}
 
 
 @app.get("/api/commitment/{commitment_id}")
 async def get_commitment(commitment_id: str):
-    """Get a single commitment by ID."""
     commitment = await db.get_commitment(commitment_id)
     if not commitment:
         raise HTTPException(status_code=404, detail="Commitment not found")
     return commitment
 
 
+@app.get("/api/user/{user_id}/commitments")
+async def get_user_commitments(user_id: str, visibility: Optional[str] = None):
+    """Get commitments for a user. visibility=public|private|all"""
+    commitments = await db.get_user_commitments(user_id, visibility)
+    return {"commitments": commitments}
+
+
 @app.get("/api/ots/{commitment_id}")
 async def get_ots_status(commitment_id: str):
-    """
-    Check OTS anchoring status for a commitment.
-    Returns Bitcoin block number if confirmed.
-    """
     commitment = await db.get_commitment(commitment_id)
     if not commitment:
         raise HTTPException(status_code=404, detail="Commitment not found")
 
-    # If already confirmed, return cached result
     if commitment.get("ots_status") == "confirmed":
         return {
             "status": "confirmed",
@@ -165,7 +154,6 @@ async def get_ots_status(commitment_id: str):
             "message": f"Anchored in Bitcoin block #{commitment.get('bitcoin_block')}"
         }
 
-    # If pending, check live status
     if commitment.get("ots_receipt"):
         status = await check_ots_status(
             commitment_id,
@@ -182,10 +170,6 @@ async def get_ots_status(commitment_id: str):
 
 @app.post("/api/reveal/{commitment_id}")
 async def reveal_commitment(commitment_id: str, data: RevealPost):
-    """
-    Reveal a commitment. Verifies the key matches before storing message.
-    This is where the server first learns the original message.
-    """
     import hmac as hmac_lib
     import hashlib
 
@@ -196,7 +180,6 @@ async def reveal_commitment(commitment_id: str, data: RevealPost):
     if commitment.get("revealed"):
         raise HTTPException(status_code=400, detail="Already revealed")
 
-    # Server-side verification before storing
     try:
         key_bytes = bytes.fromhex(data.key_hex)
         nonce_bytes = bytes.fromhex(commitment["nonce"])
@@ -215,7 +198,6 @@ async def reveal_commitment(commitment_id: str, data: RevealPost):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid key format")
 
-    # Store the revealed message
     await db.reveal_commitment(commitment_id, data.message)
 
     return {
