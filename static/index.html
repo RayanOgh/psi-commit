@@ -1200,17 +1200,31 @@ async function renderWall() {
   grid.style.display = 'grid';
   grid.innerHTML = wallItems.map((item, i) => {
     const ts = item.committed_at || item.timestamp || '';
-    const date = ts ? new Date(ts).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '';
+    const commitDate = ts ? new Date(ts).toLocaleString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '';
     const revealed = item.revealed;
     const msg = revealed ? escapeHtml(item.revealed_message || '') : '<span style="color:var(--muted);font-style:italic;font-size:0.85rem">Sealed — message hidden until reveal</span>';
-    const otsBadge = item.ots_status === 'confirmed'
-      ? `<span style="font-family:var(--mono);font-size:0.62rem;color:var(--accent2);border:1px solid var(--accent2);padding:0.2rem 0.5rem;margin-left:0.5rem">⛓ Bitcoin</span>`
-      : item.ots_status === 'submitted' ? `<span style="font-family:var(--mono);font-size:0.62rem;color:#888;border:1px solid #333;padding:0.2rem 0.5rem;margin-left:0.5rem">⏳ Anchoring</span>` : '';
+
+    // Bitcoin anchoring display
+    let otsLine = '';
+    if (item.ots_status === 'confirmed' && item.bitcoin_block) {
+      const otsDate = item.ots_confirmed_at
+        ? new Date(item.ots_confirmed_at).toLocaleString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})
+        : '';
+      otsLine = `<div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);margin-top:0.3rem">
+        ⛓ Bitcoin anchored${otsDate ? ' · ' + otsDate : ''} · block #${item.bitcoin_block}
+        <a href="https://blockstream.info/block-height/${item.bitcoin_block}" target="_blank" style="color:var(--accent2);margin-left:0.4rem;opacity:0.7">verify ↗</a>
+      </div>`;
+    } else if (item.ots_status === 'submitted') {
+      otsLine = `<div style="font-family:var(--mono);font-size:0.65rem;color:#888;margin-top:0.3rem">⏳ Bitcoin anchoring in progress...</div>`;
+    }
+
     return `
     <div class="wall-item">
       <div>
-        <div class="wall-id">${item.id} · ${date} ${otsBadge}</div>
-        <div class="wall-message">${msg}</div>
+        <div class="wall-id">${item.id}</div>
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.2rem">Committed · ${commitDate}</div>
+        ${otsLine}
+        <div class="wall-message" style="margin-top:0.6rem">${msg}</div>
         <div class="wall-meta">Context: ${item.context} · MAC: ${item.mac.substring(0,16)}...</div>
         ${!revealed ? `<button class="btn btn-outline" style="margin-top:0.75rem;font-size:0.65rem;padding:0.4rem 0.9rem" onclick="revealWallItem(${i})">Reveal</button>` : ''}
       </div>
