@@ -278,7 +278,7 @@
     border-radius: 50%;
     border: 3px solid var(--border);
     object-fit: cover;
-  } 
+  }
 
   .profile-info { flex: 1; }
 
@@ -1407,7 +1407,7 @@ document.getElementById('auth-modal').addEventListener('click', function(e) {
 // ── PROFILE CREATION ──
 async function ensureProfile(user) {
   // Check if profile exists
-  const { data: existing } = await supabase
+  const { data: existing } = await sb
     .from('profiles')
     .select('*')
     .eq('id', user.id)
@@ -1424,7 +1424,7 @@ async function ensureProfile(user) {
   const avatarSeed = user.id;
   const avatarUrl = user.user_metadata?.avatar_url || getAvatarUrl(avatarSeed);
 
-  const { data: profile, error } = await supabase
+  const { data: profile, error } = await sb
     .from('profiles')
     .insert({
       id: user.id,
@@ -1512,7 +1512,7 @@ async function loadProfileData() {
   document.getElementById('stat-following').textContent = currentProfile.following_count || 0;
 
   // Load public commitments
-  const { data: publicCommits } = await supabase
+  const { data: publicCommits } = await sb
     .from('commitments')
     .select('*')
     .eq('user_id', currentUser.id)
@@ -1520,7 +1520,7 @@ async function loadProfileData() {
     .order('committed_at', { ascending: false });
 
   // Load private commitments
-  const { data: privateCommits } = await supabase
+  const { data: privateCommits } = await sb
     .from('commitments')
     .select('*')
     .eq('user_id', currentUser.id)
