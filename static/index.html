@@ -1355,7 +1355,7 @@
 // ── SUPABASE ──
 const SUPABASE_URL = 'https://tdqlqemmlfcldhmtxziv.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkcWxxZW1tbGZjbGRobXR4eml2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyMzg0ODgsImV4cCI6MjA4NzgxNDQ4OH0.zDdr4uOIelx2CbNyMWmRaSN9TuNMA_eCBr2E98ElmWo';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
 
@@ -1374,7 +1374,7 @@ function getAvatarUrl(seed) {
 
 // ── AUTH ──
 async function signInWithGoogle() {
-  const { error } = await supabase.auth.signInWithOAuth({
+  const { error } = await sb.auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo: window.location.origin
@@ -1384,7 +1384,7 @@ async function signInWithGoogle() {
 }
 
 async function signOut() {
-  await supabase.auth.signOut();
+  await sb.auth.signOut();
   currentUser = null;
   currentProfile = null;
   updateAuthUI(null);
@@ -1534,7 +1534,7 @@ async function loadProfileData() {
   document.getElementById('stat-private').textContent = privCount;
 
   // Update profile in DB
-  await supabase.from('profiles').update({ public_commits_count: pubCount }).eq('id', currentUser.id);
+  await sb.from('profiles').update({ public_commits_count: pubCount }).eq('id', currentUser.id);
 
   renderProfileCommits('public-wall-container', publicCommits || []);
   renderProfileCommits('private-wall-container', privateCommits || [], true);
@@ -1922,7 +1922,7 @@ function escapeHtml(str) {
 // ── INIT ──
 document.addEventListener('DOMContentLoaded', async () => {
   // Check for existing session
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await sb.auth.getSession();
   if (session?.user) {
     currentUser = session.user;
     await ensureProfile(session.user);
@@ -1930,7 +1930,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Listen for auth changes
-  supabase.auth.onAuthStateChange(async (event, session) => {
+  sb.auth.onAuthStateChange(async (event, session) => {
     if (session?.user) {
       currentUser = session.user;
       await ensureProfile(session.user);
