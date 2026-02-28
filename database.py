@@ -2,7 +2,6 @@
 Database layer — Supabase client.
 All commitment data lives here.
 """
-
 import os
 from supabase import create_client, Client
 from typing import Optional, List, Dict
@@ -43,21 +42,47 @@ class Database:
 
     async def get_wall(self, limit: int = 50, offset: int = 0) -> List[dict]:
         """
-        Fetch public wall commitments, newest first.
+        Fetch PUBLIC wall commitments only, newest first.
         Never returns secret keys or unrevealed messages.
         """
         client = get_client()
         result = (
             client.table("commitments")
             .select(
-                "id, mac, nonce, context, domain, committed_at, "
-                "revealed, revealed_message, ots_status, bitcoin_block, ots_confirmed_at"
-                # Note: deliberately NOT selecting any secret key fields
+                "id, mac, nonce, context, domain, committed_at, visibility, "
+                "revealed, revealed_message, ots_status, bitcoin_block, ots_confirmed_at, "
+                "user_id, profiles(username, avatar_url, avatar_seed)"
             )
+            .eq("visibility", "public")
             .order("committed_at", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
         )
+        return result.data or []
+
+    async def get_user_commitments(
+        self,
+        user_id: str,
+        visibility: Optional[str] = None
+    ) -> List[dict]:
+        """
+        Fetch commitments for a specific user.
+        visibility = 'public' | 'private' | None (returns all)
+        """
+        client = get_client()
+        query = (
+            client.table("commitments")
+            .select(
+                "id, mac, nonce, context, domain, committed_at, visibility, "
+                "revealed, revealed_message, ots_status, bitcoin_block, ots_confirmed_at"
+            )
+            .eq("user_id", user_id)
+            .order("committed_at", desc=True)
+        )
+        if visibility in ("public", "private"):
+            query = query.eq("visibility", visibility)
+
+        result = query.execute()
         return result.data or []
 
     async def update_ots(
@@ -75,7 +100,6 @@ class Database:
         }
         if bitcoin_block:
             update["bitcoin_block"] = bitcoin_block
-
         client.table("commitments").update(update).eq("id", commitment_id).execute()
 
     async def reveal_commitment(self, commitment_id: str, message: str):
@@ -87,9 +111,8 @@ class Database:
             "revealed_at": "now()"
         }).eq("id", commitment_id).execute()
 
-
     async def get_pending_ots(self) -> List[dict]:
-        """Fetch all commitments that are submitted but not yet confirmed in Bitcoin."""
+        """Fetch all commitments submitted but not yet confirmed in Bitcoin."""
         client = get_client()
         result = (
             client.table("commitments")
