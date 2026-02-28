@@ -33,7 +33,6 @@ async def anchor_commitment(commitment_id: str, mac_hex: str):
     try:
         digest = hash_mac(mac_hex)
 
-        # Try each calendar server until one succeeds
         receipt_data = None
         for calendar_url in OTS_CALENDARS:
             try:
@@ -44,7 +43,6 @@ async def anchor_commitment(commitment_id: str, mac_hex: str):
                 continue
 
         if receipt_data:
-            # Save the raw receipt — Bitcoin not yet confirmed (~2hrs)
             await db.update_ots(
                 commitment_id=commitment_id,
                 ots_receipt=receipt_data,
@@ -87,11 +85,12 @@ async def check_ots_status(
     try:
         receipt_bytes = bytes.fromhex(ots_receipt_hex)
 
-        # Try to upgrade the receipt (checks if Bitcoin block is mined)
-        upgraded = await upgrade_receipt(receipt_bytes)
+        # Use the original MAC as the digest — this is what we submitted to the calendar
+        digest = bytes.fromhex(mac_hex)
 
-        if upgraded and b"bitcoin" in upgraded.lower() if isinstance(upgraded, bytes) else False:
-            # Parse block number from upgraded receipt
+        upgraded = await upgrade_receipt(receipt_bytes, digest=digest)
+
+        if upgraded:
             block_num = parse_bitcoin_block(upgraded)
             if block_num:
                 await db.update_ots(
@@ -118,27 +117,27 @@ async def check_ots_status(
         }
 
 
-async def upgrade_receipt(receipt_bytes: bytes) -> Optional[bytes]:
+async def upgrade_receipt(receipt_bytes: bytes, digest: bytes = None) -> Optional[bytes]:
     """
-    Try to upgrade a pending OTS receipt by fetching confirmation
-    from calendar servers.
-    
-    OTS pending receipts contain a commitment hash that the calendar server
-    tracks. We send the commitment to the calendar and it returns an upgraded
-    receipt containing the Bitcoin block proof if confirmed.
-    """
-    # Extract the commitment hash from the pending receipt
-    # The last 32 bytes of the pending receipt is the commitment hash
-    if len(receipt_bytes) < 32:
-        return None
+    Try to upgrade a pending OTS receipt by fetching confirmation from calendar servers.
 
-    commitment_hash = receipt_bytes[-32:]
-    commitment_hex = commitment_hash.hex()
+    The digest is the original 32-byte hash we submitted to the calendar.
+    We query the calendar with this digest to get the upgraded receipt
+    containing the Bitcoin block proof if confirmed.
+    """
+    if digest:
+        commitment_hex = digest.hex()
+    else:
+        # Fall back to extracting from receipt — skip 2-byte magic header
+        if len(receipt_bytes) < 34:
+            return None
+        commitment_hex = receipt_bytes[2:34].hex()
+
+    print(f"[OTS] Checking calendar for digest: {commitment_hex[:16]}...")
 
     for calendar_url in OTS_CALENDARS:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                # Correct OTS API: GET /timestamp/{hex_hash}
                 response = await client.get(
                     f"{calendar_url}/timestamp/{commitment_hex}",
                     headers={"Accept": "application/octet-stream"}
@@ -162,20 +161,15 @@ def parse_bitcoin_block(receipt_bytes: bytes) -> Optional[int]:
     Uses the opentimestamps library for proper parsing.
     Falls back to heuristic scanning if library unavailable.
     """
-    # Try using the opentimestamps library first (proper parsing)
     try:
-        from opentimestamps.core.timestamp import Timestamp, DetachedTimestampFile
-        from opentimestamps.core.op import OpSHA256, OpPrepend, OpAppend
-        from opentimestamps.calendar import RemoteCalendar
+        from opentimestamps.core.timestamp import DetachedTimestampFile
+        from opentimestamps.core.notary import BitcoinBlockHeaderAttestation
         import io
 
-        # Parse the detached timestamp file
         ctx = io.BytesIO(receipt_bytes)
         detached = DetachedTimestampFile.deserialize(ctx)
 
-        # Walk the timestamp tree looking for Bitcoin attestations
         def find_bitcoin_block(timestamp):
-            from opentimestamps.core.notary import BitcoinBlockHeaderAttestation
             for attestation in timestamp.attestations:
                 if isinstance(attestation, BitcoinBlockHeaderAttestation):
                     return attestation.height
@@ -193,7 +187,6 @@ def parse_bitcoin_block(receipt_bytes: bytes) -> Optional[int]:
         pass
 
     # Fallback: scan for 4-byte big-endian integers in Bitcoin block range
-    # Current Bitcoin block height is ~880,000-900,000
     try:
         for i in range(len(receipt_bytes) - 4):
             val = int.from_bytes(receipt_bytes[i:i+4], 'big')
