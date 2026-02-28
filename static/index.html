@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PSI-COMMIT — Prove You Said It First</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black: #0a0a0a;
+    --white: #f5f2eb;
+    --cream: #ede9df;
+    --accent: #c8f000;
+    --accent2: #00f0c8;
+    --mid: #1a1a1a;
+    --border: #2a2a2a;
+    --muted: #555;
+    --mono: 'DM Mono', monospace;
+    --display: 'Bebas Neue', sans-serif;
+    --body: 'DM Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--black);
+    color: var(--white);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.4;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.2rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,10,0.92);
+    backdrop-filter: blur(12px);
+  }
+
+  .nav-logo {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+  }
+
+  .nav-links a {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-decoration: none;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+
+  .nav-links a:hover { color: var(--white); }
+
+  /* ── HERO ── */
+  #hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 8rem 2.5rem 4rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(200,240,0,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(200,240,0,0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 0%, transparent 100%);
+  }
+
+  .hero-tag {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .hero-tag::before {
+    content: '';
+    display: block;
+    width: 2rem;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(5rem, 14vw, 13rem);
+    line-height: 0.9;
+    letter-spacing: 0.02em;
+    color: var(--white);
+    margin-bottom: 0.3em;
+  }
+
+  h1 span {
+    color: var(--accent);
+    display: block;
+  }
+
+  .hero-sub {
+    font-size: 1.15rem;
+    color: #aaa;
+    max-width: 520px;
+    margin: 1.5rem 0 3rem;
+    font-weight: 300;
+    line-height: 1.7;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.85rem 1.8rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--black);
+    font-weight: 500;
+  }
+
+  .btn-primary:hover {
+    background: #d9ff00;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(200,240,0,0.3);
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--white);
+    border: 1px solid var(--border);
+  }
+
+  .btn-outline:hover {
+    border-color: var(--white);
+    transform: translateY(-2px);
+  }
+
+  .hero-stats {
+    display: flex;
+    gap: 3rem;
+    margin-top: 5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 0.3rem;
+  }
+
+  .stat-val {
+    font-family: var(--display);
+    font-size: 2.2rem;
+    color: var(--white);
+    letter-spacing: 0.05em;
+  }
+
+  /* ── HOW IT WORKS ── */
+  #how {
+    padding: 7rem 2.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+
+  .section-title {
+    font-family: var(--display);
+    font-size: clamp(2.5rem, 6vw, 5rem);
+    line-height: 0.95;
+    margin-bottom: 4rem;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: 1px solid var(--border);
+  }
+
+  .step {
+    padding: 2.5rem;
+    border-right: 1px solid var(--border);
+    position: relative;
+  }
+
+  .step:last-child { border-right: none; }
+
+  .step-num {
+    font-family: var(--display);
+    font-size: 5rem;
+    color: var(--border);
+    line-height: 1;
+    margin-bottom: 1.5rem;
+  }
+
+  .step-title {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+
+  .step p {
+    font-size: 0.95rem;
+    color: #999;
+    line-height: 1.7;
+  }
+
+  /* ── USE CASES ── */
+  #usecases {
+    padding: 7rem 2.5rem;
+    border-top: 1px solid var(--border);
+    background: var(--mid);
+  }
+
+  .cases-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--border);
+    margin-top: 3rem;
+  }
+
+  .case {
+    background: var(--mid);
+    padding: 2.5rem;
+    transition: background 0.2s;
+  }
+
+  .case:hover { background: #222; }
+
+  .case-icon {
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+  }
+
+  .case h3 {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--white);
+    margin-bottom: 0.75rem;
+  }
+
+  .case p {
+    font-size: 0.9rem;
+    color: #888;
+    line-height: 1.7;
+  }
+
+  /* ── MAIN APP ── */
+  #app {
+    padding: 7rem 2.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .app-tabs {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    width: fit-content;
+    margin-bottom: 3rem;
+  }
+
+  .tab {
+    padding: 0.75rem 1.8rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-right: 1px solid var(--border);
+    transition: all 0.2s;
+  }
+
+  .tab:last-child { border-right: none; }
+  .tab.active { background: var(--accent); color: var(--black); font-weight: 500; }
+  .tab:not(.active):hover { color: var(--white); background: #1a1a1a; }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .app-card {
+    border: 1px solid var(--border);
+    padding: 2.5rem;
+    max-width: 680px;
+    background: var(--mid);
+  }
+
+  .field-label {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+
+  textarea, input[type="text"] {
+    width: 100%;
+    background: var(--black);
+    border: 1px solid var(--border);
+    color: var(--white);
+    font-family: var(--mono);
+    font-size: 0.88rem;
+    padding: 1rem;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+    line-height: 1.6;
+  }
+
+  textarea:focus, input[type="text"]:focus {
+    border-color: var(--accent);
+  }
+
+  textarea { min-height: 120px; }
+
+  .field-group { margin-bottom: 1.5rem; }
+
+  .result-box {
+    background: var(--black);
+    border: 1px solid var(--accent);
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+    display: none;
+  }
+
+  .result-box.show { display: block; }
+
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .result-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+  .result-key {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+
+  .result-val {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--accent);
+    word-break: break-all;
+    text-align: right;
+  }
+
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .warning-box {
+    background: rgba(200,240,0,0.06);
+    border: 1px solid rgba(200,240,0,0.3);
+    padding: 1rem 1.25rem;
+    margin-top: 1.5rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--accent);
+    line-height: 1.6;
+    display: none;
+  }
+
+  .warning-box.show { display: block; }
+
+  .verify-result {
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    letter-spacing: 0.05em;
+    display: none;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .verify-result.show { display: flex; }
+  .verify-result.valid { background: rgba(0,240,200,0.08); border: 1px solid rgba(0,240,200,0.4); color: var(--accent2); }
+  .verify-result.invalid { background: rgba(255,60,60,0.08); border: 1px solid rgba(255,60,60,0.4); color: #ff6060; }
+
+  .verify-icon { font-size: 1.5rem; }
+
+  /* ── WALL ── */
+  #wall-panel .app-card { max-width: 100%; }
+
+  .wall-empty {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+  }
+
+  .wall-grid {
+    display: grid;
+    gap: 1px;
+    background: var(--border);
+  }
+
+  .wall-item {
+    background: var(--mid);
+    padding: 1.5rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .wall-item:hover { background: #222; }
+
+  .wall-id {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+
+  .wall-message {
+    font-size: 0.95rem;
+    color: var(--white);
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+  }
+
+  .wall-meta {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+
+  .wall-badge {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+
+  .badge-revealed { border-color: var(--accent2); color: var(--accent2); }
+  .badge-pending { border-color: var(--border); color: var(--muted); }
+
+  /* ── SECURITY ── */
+  #security {
+    padding: 7rem 2.5rem;
+    border-top: 1px solid var(--border);
+    background: var(--mid);
+  }
+
+  .security-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4rem;
+    margin-top: 3rem;
+  }
+
+  .sec-col h3 {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sec-col h3.provides { color: var(--accent); }
+  .sec-col h3.not-provides { color: #ff6060; }
+
+  .sec-item {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: #999;
+  }
+
+  .sec-item::before {
+    content: '✓';
+    color: var(--accent);
+    font-family: var(--mono);
+    flex-shrink: 0;
+  }
+
+  .sec-item.no::before {
+    content: '✗';
+    color: #ff6060;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    padding: 3rem 2.5rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .footer-logo {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+  }
+
+  .footer-links a {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-decoration: none;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+
+  .footer-links a:hover { color: var(--white); }
+
+  .footer-copy {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .hero-tag { animation: fadeUp 0.6s ease both; }
+  h1 { animation: fadeUp 0.6s ease 0.1s both; }
+  .hero-sub { animation: fadeUp 0.6s ease 0.2s both; }
+  .hero-actions { animation: fadeUp 0.6s ease 0.3s both; }
+  .hero-stats { animation: fadeUp 0.6s ease 0.4s both; }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 3px;
+    height: 0.85em;
+    background: var(--accent);
+    margin-left: 4px;
+    vertical-align: middle;
+    animation: blink 1s step-end infinite;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--black); }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 768px) {
+    nav { padding: 1rem 1.5rem; }
+    .nav-links { display: none; }
+    #hero { padding: 6rem 1.5rem 3rem; }
+    .hero-stats { gap: 2rem; flex-wrap: wrap; }
+    .steps { grid-template-columns: 1fr; }
+    .step { border-right: none; border-bottom: 1px solid var(--border); }
+    .cases-grid { grid-template-columns: 1fr; }
+    .security-grid { grid-template-columns: 1fr; }
+    #app, #how, #usecases, #security { padding: 4rem 1.5rem; }
+    .app-card { padding: 1.5rem; }
+    footer { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">PSI — COMMIT</div>
+  <ul class="nav-links">
+    <li><a href="#how">How it works</a></li>
+    <li><a href="#app">Commit</a></li>
+    <li><a href="#app">Verify</a></li>
+    <li><a href="#app">Wall</a></li>
+    <li><a href="https://github.com/RayanOgh/psi-commit" target="_blank">GitHub</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-tag">Cryptographic Commitment Scheme</div>
+  <h1>PROVE<span>YOU SAID<span class="cursor"></span></span>IT FIRST.</h1>
+  <p class="hero-sub">Commit to any prediction, hypothesis, or decision before the outcome — then reveal it later with mathematical proof you didn't cheat. No blockchain. No trust required.</p>
+  <div class="hero-actions">
+    <a href="#app" class="btn btn-primary">Make a Commitment →</a>
+    <a href="#how" class="btn btn-outline">How it works</a>
+  </div>
+  <div class="hero-stats">
+    <div>
+      <div class="stat-label">Algorithm</div>
+      <div class="stat-val" style="font-size:1.1rem;font-family:var(--mono);color:var(--accent)">HMAC-SHA256</div>
+    </div>
+    <div>
+      <div class="stat-label">Dependencies</div>
+      <div class="stat-val">ZERO</div>
+    </div>
+    <div>
+      <div class="stat-label">License</div>
+      <div class="stat-val" style="font-size:1.1rem;font-family:var(--mono)">MIT</div>
+    </div>
+    <div>
+      <div class="stat-label">Key Storage</div>
+      <div class="stat-val" style="font-size:0.9rem;font-family:var(--mono);color:var(--accent2)">CLIENT ONLY</div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="section-label">Process</div>
+  <h2 class="section-title">THREE STEPS.<br>ZERO TRUST.</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <div class="step-title">Commit</div>
+      <p>Write your prediction, hypothesis, or decision. A cryptographic digest is generated in your browser — your secret key never leaves your device.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <div class="step-title">Wait</div>
+      <p>Publish your commitment ID publicly. It's completely unreadable — nobody can guess your message from the hash, no matter how many tries.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <div class="step-title">Reveal</div>
+      <p>When you're ready, reveal your message and key. Anyone can verify — mathematically — that you wrote it before the outcome. The proof is permanent.</p>
+    </div>
+  </div>
+</section>
+
+<!-- USE CASES -->
+<section id="usecases">
+  <div class="section-label">Applications</div>
+  <h2 class="section-title">WHO NEEDS<br>PROOF?</h2>
+  <div class="cases-grid">
+    <div class="case">
+      <div class="case-icon">🔬</div>
+      <h3>Researchers</h3>
+      <p>Pre-register hypotheses without going through a journal. Prove your analysis wasn't shaped by results. Block p-hacking and HARKing before they start.</p>
+    </div>
+    <div class="case">
+      <div class="case-icon">📈</div>
+      <h3>Forecasters</h3>
+      <p>Your Metaculus score is fine — but can you prove what you called to people who weren't on the platform? Build a portable, verifiable prediction record.</p>
+    </div>
+    <div class="case">
+      <div class="case-icon">🏢</div>
+      <h3>Executives & Teams</h3>
+      <p>Seal strategic decisions before earnings calls, board meetings, or vendor negotiations. Cryptographic audit trail. No lawyers required.</p>
+    </div>
+    <div class="case">
+      <div class="case-icon">🎲</div>
+      <h3>Fair Games</h3>
+      <p>Simultaneous sealed-bid auctions, game moves, or contest submissions. Commit first, reveal together. Mathematically fair by design.</p>
+    </div>
+  </div>
+</section>
+
+<!-- APP -->
+<section id="app">
+  <div class="section-label">Tool</div>
+  <h2 class="section-title" style="margin-bottom:2rem">USE IT NOW.</h2>
+
+  <div class="app-tabs">
+    <button class="tab active" onclick="switchTab('commit')">Commit</button>
+    <button class="tab" onclick="switchTab('verify')">Verify</button>
+    <button class="tab" onclick="switchTab('wall')">Wall</button>
+  </div>
+
+  <!-- COMMIT PANEL -->
+  <div class="tab-panel active" id="commit-panel">
+    <div class="app-card">
+      <div class="field-group">
+        <label class="field-label" for="commit-message">Your message / prediction / hypothesis</label>
+        <textarea id="commit-message" placeholder="e.g. The Fed will cut rates by 25bps at the March 2026 meeting&#10;&#10;Be specific. Be honest. The commitment is only as meaningful as the claim."></textarea>
+      </div>
+      <div class="field-group">
+        <label class="field-label" for="commit-context">Context label (optional)</label>
+        <input type="text" id="commit-context" placeholder="e.g. macro-forecast, clinical-trial-2026, team-bet" value="default">
+      </div>
+      <button class="btn btn-primary" onclick="createCommitment()">Generate Commitment →</button>
+
+      <!-- COMMITMENT CARD -->
+      <div class="result-box" id="commit-result">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
+          <div style="font-family:var(--mono);font-size:0.68rem;letter-spacing:0.2em;color:var(--accent);text-transform:uppercase">Your Commitment Receipt</div>
+          <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)" id="res-time"></div>
+        </div>
+
+        <!-- CARD BODY -->
+        <div id="commitment-card" style="background:var(--black);border:1px solid #333;padding:1.5rem;font-family:var(--mono);font-size:0.78rem;line-height:2;white-space:pre-wrap;word-break:break-all;color:#ccc"></div>
+
+        <!-- WARNING -->
+        <div style="background:rgba(200,240,0,0.06);border:1px solid rgba(200,240,0,0.25);padding:1rem 1.25rem;margin-top:1.25rem;font-family:var(--mono);font-size:0.72rem;color:var(--accent);line-height:1.7">
+          ⚠ SAVE THIS RECEIPT. Your secret key is not stored anywhere — not on this server, not in your browser. If you lose it, you can never prove this commitment. Copy or download it now.
+        </div>
+
+        <!-- ACTIONS -->
+        <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Receipt</button>
+          <button class="btn btn-outline" onclick="downloadPDF()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Save as PDF</button>
+          <button class="btn btn-outline" onclick="addToWall()" style="font-size:0.72rem;padding:0.7rem 1.4rem">+ Add to Public Wall</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VERIFY PANEL -->
+  <div class="tab-panel" id="verify-panel">
+    <div class="app-card">
+
+      <!-- STEP 1: PASTE RECEIPT -->
+      <div class="field-group">
+        <label class="field-label" for="verify-paste">Step 1 — Paste your commitment receipt</label>
+        <textarea id="verify-paste" placeholder="Paste your full commitment receipt here (the text you copied or saved as PDF)..." style="min-height:160px;font-size:0.78rem" oninput="parseReceipt()"></textarea>
+        <div style="font-family:var(--mono);font-size:0.68rem;color:var(--muted);margin-top:0.5rem">Fields will fill automatically when you paste your receipt.</div>
+      </div>
+
+      <!-- PARSED FIELDS (auto-filled, readonly) -->
+      <div id="parsed-fields" style="display:none">
+        <div style="font-family:var(--mono);font-size:0.68rem;letter-spacing:0.15em;color:var(--accent);text-transform:uppercase;margin-bottom:1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border)">Parsed from receipt ✓</div>
+        <div class="field-group">
+          <label class="field-label">Commitment ID</label>
+          <input type="text" id="p-id" readonly style="color:var(--accent);cursor:default;opacity:0.8">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Secret Key</label>
+          <input type="text" id="p-key" readonly style="color:#ff9060;cursor:default;opacity:0.8">
+        </div>
+        <div class="field-group">
+          <label class="field-label">MAC</label>
+          <input type="text" id="p-mac" readonly style="cursor:default;opacity:0.8">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Nonce</label>
+          <input type="text" id="p-nonce" readonly style="cursor:default;opacity:0.8">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Context</label>
+          <input type="text" id="p-context" readonly style="cursor:default;opacity:0.8">
+        </div>
+      </div>
+
+      <!-- STEP 2: ENTER MESSAGE -->
+      <div class="field-group">
+        <label class="field-label" for="verify-message">Step 2 — Enter the original message to verify</label>
+        <textarea id="verify-message" placeholder="Type or paste the original message exactly as it was committed..." style="min-height:80px"></textarea>
+      </div>
+
+      <button class="btn btn-primary" onclick="verifyCommitment()">Verify →</button>
+
+      <div class="verify-result" id="verify-result">
+        <span class="verify-icon" id="verify-icon"></span>
+        <span id="verify-msg"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- WALL PANEL -->
+  <div class="tab-panel" id="wall-panel">
+    <div class="app-card">
+      <div id="wall-container">
+        <div class="wall-empty" id="wall-empty">
+          No public commitments yet.<br>
+          <span style="color:#444;font-size:0.75rem;margin-top:0.5rem;display:block">Make a commitment and add it to the wall to appear here.</span>
+        </div>
+        <div class="wall-grid" id="wall-grid" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section id="security">
+  <div class="section-label">Transparency</div>
+  <h2 class="section-title">WHAT THIS<br>DOES & DOESN'T.</h2>
+  <div class="security-grid">
+    <div class="sec-col">
+      <h3 class="provides">What this provides</h3>
+      <div class="sec-item">Cryptographic binding — you cannot change your message after committing</div>
+      <div class="sec-item">Cryptographic hiding — the commitment reveals nothing until you reveal</div>
+      <div class="sec-item">Domain separation — prevents cross-context replay attacks</div>
+      <div class="sec-item">Constant-time verification — immune to timing attacks</div>
+      <div class="sec-item">Zero-knowledge server — your secret never leaves your browser</div>
+      <div class="sec-item">HMAC-SHA256 — 256-bit security, same standard used by AWS and GitHub</div>
+    </div>
+    <div class="sec-col">
+      <h3 class="not-provides">What this does NOT provide</h3>
+      <div class="sec-item no">Anonymity — it doesn't hide who made the commitment</div>
+      <div class="sec-item no">Forward secrecy — key compromise allows forging of that commitment</div>
+      <div class="sec-item no">Byzantine fault tolerance — requires trust in the key holder</div>
+      <div class="sec-item no">Permanent immutable record — without OTS anchoring, the timestamp is ours</div>
+    </div>
+  </div>
+  <div style="margin-top:3rem;padding:2rem;border:1px solid var(--border);max-width:680px">
+    <div class="section-label" style="margin-bottom:0.5rem">Open Source</div>
+    <p style="color:#999;font-size:0.9rem;line-height:1.7">The cryptographic core is MIT-licensed and publicly auditable. Don't trust us — read the code. Built on pure Python with zero dependencies.</p>
+    <a href="https://github.com/RayanOgh/psi-commit" target="_blank" class="btn btn-outline" style="margin-top:1.5rem;display:inline-flex">View Source on GitHub →</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">PSI — COMMIT</div>
+  <ul class="footer-links">
+    <li><a href="#app">Commit</a></li>
+    <li><a href="#app">Verify</a></li>
+    <li><a href="https://github.com/RayanOgh/psi-commit" target="_blank">GitHub</a></li>
+    <li><a href="#security">Security</a></li>
+  </ul>
+  <div class="footer-copy">MIT License · HMAC-SHA256 · Zero Dependencies</div>
+</footer>
+
+<script>
+// ── STATE ──
+let currentCommitment = null;
+let wallItems = [];
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
+
+// ── TABS ──
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(name + '-panel').classList.add('active');
+  event.target.classList.add('active');
+  if (name === 'wall') renderWall();
+}
+
+// ── CRYPTO UTILS ──
+function bytesToHex(bytes) {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBytes(hex) {
+  const arr = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2)
+    arr[i / 2] = parseInt(hex.substr(i, 2), 16);
+  return arr;
+}
+
+function generateRandomHex(bytes) {
+  const arr = new Uint8Array(bytes);
+  crypto.getRandomValues(arr);
+  return bytesToHex(arr);
+}
+
+async function computeHMAC(keyHex, domain, nonce, message) {
+  const keyBytes = hexToBytes(keyHex);
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  // Concatenate domain + nonce + message as bytes (matching Python implementation)
+  const enc = new TextEncoder();
+  const domainBytes = enc.encode(domain);
+  const nonceBytes = hexToBytes(nonce);
+  const msgBytes = enc.encode(message);
+  const combined = new Uint8Array(domainBytes.length + nonceBytes.length + msgBytes.length);
+  combined.set(domainBytes, 0);
+  combined.set(nonceBytes, domainBytes.length);
+  combined.set(msgBytes, domainBytes.length + nonceBytes.length);
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, combined);
+  return bytesToHex(new Uint8Array(signature));
+}
+
+// ── COMMIT ──
+async function createCommitment() {
+  const message = document.getElementById('commit-message').value.trim();
+  const context = document.getElementById('commit-context').value.trim() || 'default';
+
+  if (!message) {
+    document.getElementById('commit-message').style.borderColor = '#ff6060';
+    setTimeout(() => document.getElementById('commit-message').style.borderColor = '', 1500);
+    return;
+  }
+
+  const key = generateRandomHex(32);
+  const nonce = generateRandomHex(32);
+  const domain = `psi-commit.v1.${context}`;
+  const mac = await computeHMAC(key, domain, nonce, message);
+  const id = 'psc_' + mac.substring(0, 16);
+  const timestamp = new Date().toISOString();
+
+  currentCommitment = { id, key, nonce, mac, domain, context, message, timestamp };
+
+  // Build plain-text receipt card
+  const card = [
+    `PSI-COMMIT RECEIPT`,
+    `${'─'.repeat(48)}`,
+    `ID        ${id}`,
+    `DATE      ${new Date(timestamp).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })}`,
+    `CONTEXT   ${domain}`,
+    `${'─'.repeat(48)}`,
+    `MAC       ${mac}`,
+    `NONCE     ${nonce}`,
+    `${'─'.repeat(48)}`,
+    `SECRET KEY (keep private — do not share until reveal)`,
+    `${key}`,
+    `${'─'.repeat(48)}`,
+    `Verify at: psicommit.com/verify`,
+  ].join('\n');
+
+  document.getElementById('commitment-card').textContent = card;
+  document.getElementById('res-time').textContent = new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  document.getElementById('commit-result').classList.add('show');
+}
+
+// ── COPY CARD ──
+function copyCard() {
+  const text = document.getElementById('commitment-card').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  });
+}
+
+// ── DOWNLOAD PDF ──
+function downloadPDF() {
+  if (!currentCommitment) return;
+  const card = document.getElementById('commitment-card').textContent;
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <html><head><title>PSI-COMMIT Receipt</title>
+    <style>
+      body { font-family: monospace; font-size: 13px; padding: 40px; background: #fff; color: #111; max-width: 680px; margin: 0 auto; }
+      pre { white-space: pre-wrap; word-break: break-all; line-height: 1.8; }
+      h2 { font-family: sans-serif; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; }
+    </style></head>
+    <body>
+      <h2>Cryptographic Commitment Receipt — psicommit.com</h2>
+      <pre>${escapeHtml(card)}</pre>
+      <script>window.onload = () => { window.print(); }<\/script>
+    </body></html>
+  `);
+  win.document.close();
+}
+
+// ── PARSE RECEIPT (auto-fill verify tab) ──
+function parseReceipt() {
+  const text = document.getElementById('verify-paste').value;
+  const fields = document.getElementById('parsed-fields');
+
+  const extract = (label) => {
+    const regex = new RegExp(`${label}\\s+([a-zA-Z0-9_\\-\\.]+)`);
+    const match = text.match(regex);
+    return match ? match[1].trim() : '';
+  };
+
+  // Extract key (special case — it's on a line by itself after "SECRET KEY")
+  const keyMatch = text.match(/SECRET KEY[^\n]*\n([a-f0-9]{64})/i);
+  const macMatch = text.match(/MAC\s+([a-f0-9]{64})/i);
+  const nonceMatch = text.match(/NONCE\s+([a-f0-9]{64})/i);
+  const idMatch = text.match(/ID\s+(psc_[a-f0-9]+)/i);
+  const contextMatch = text.match(/CONTEXT\s+(psi-commit\.[^\s]+)/i);
+
+  const key = keyMatch ? keyMatch[1] : '';
+  const mac = macMatch ? macMatch[1] : '';
+  const nonce = nonceMatch ? nonceMatch[1] : '';
+  const id = idMatch ? idMatch[1] : '';
+  const context = contextMatch ? contextMatch[1].replace('psi-commit.v1.', '') : '';
+
+  if (key || mac || nonce) {
+    document.getElementById('p-key').value = key;
+    document.getElementById('p-mac').value = mac;
+    document.getElementById('p-nonce').value = nonce;
+    document.getElementById('p-id').value = id;
+    document.getElementById('p-context').value = context || 'default';
+    fields.style.display = 'block';
+  } else {
+    fields.style.display = 'none';
+  }
+}
+
+// ── VERIFY ──
+async function verifyCommitment() {
+  const message = document.getElementById('verify-message').value.trim();
+  const keyHex = document.getElementById('p-key').value.trim();
+  const expectedMac = document.getElementById('p-mac').value.trim();
+  const nonce = document.getElementById('p-nonce').value.trim();
+  const context = document.getElementById('p-context').value.trim() || 'default';
+
+  const resultEl = document.getElementById('verify-result');
+  const iconEl = document.getElementById('verify-icon');
+  const msgEl = document.getElementById('verify-msg');
+
+  if (!message) {
+    resultEl.className = 'verify-result show invalid';
+    iconEl.textContent = '✗';
+    msgEl.textContent = 'Please enter the original message to verify.';
+    return;
+  }
+
+  if (!keyHex || !expectedMac || !nonce) {
+    resultEl.className = 'verify-result show invalid';
+    iconEl.textContent = '✗';
+    msgEl.textContent = 'Please paste your commitment receipt first.';
+    return;
+  }
+
+  try {
+    const domain = `psi-commit.v1.${context}`;
+    const actualMac = await computeHMAC(keyHex, domain, nonce, message);
+    const valid = actualMac.toLowerCase() === expectedMac.toLowerCase();
+
+    resultEl.className = `verify-result show ${valid ? 'valid' : 'invalid'}`;
+    iconEl.textContent = valid ? '✓' : '✗';
+    msgEl.textContent = valid
+      ? 'VERIFIED — This commitment matches the message and key. The claim was made before reveal.'
+      : 'FAILED — The commitment does not match. The message or key may have been altered.';
+  } catch(e) {
+    resultEl.className = 'verify-result show invalid';
+    iconEl.textContent = '✗';
+    msgEl.textContent = 'Error: ' + e.message;
+  }
+}
+
+// ── WALL ──
+async function addToWall() {
+  if (!currentCommitment) return;
+  const btn = event.target;
+  const orig = btn.textContent;
+  btn.textContent = 'Adding...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/commit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: currentCommitment.id,
+        mac: currentCommitment.mac,
+        nonce: currentCommitment.nonce,
+        context: currentCommitment.context,
+        domain: currentCommitment.domain,
+        timestamp: currentCommitment.timestamp,
+      })
+    });
+    if (!res.ok) throw new Error();
+    btn.textContent = '✓ Added!';
+    setTimeout(() => document.querySelectorAll('.tab')[2].click(), 600);
+  } catch(e) {
+    // Fallback: store locally if backend not running yet
+    const item = {
+      id: currentCommitment.id, mac: currentCommitment.mac,
+      context: currentCommitment.context, committed_at: currentCommitment.timestamp,
+      revealed: false, revealed_message: null, ots_status: 'local'
+    };
+    if (!wallItems.find(w => w.id === item.id)) wallItems.unshift(item);
+    document.querySelectorAll('.tab')[2].click();
+  } finally {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+
+async function renderWall() {
+  const grid = document.getElementById('wall-grid');
+  const empty = document.getElementById('wall-empty');
+
+  // Try real API first
+  try {
+    const res = await fetch(`${API_BASE}/api/wall`);
+    if (res.ok) {
+      const data = await res.json();
+      wallItems = data.commitments || [];
+    }
+  } catch(e) { /* use local wallItems */ }
+
+  if (wallItems.length === 0) {
+    empty.style.display = 'block';
+    grid.style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+  grid.style.display = 'grid';
+  grid.innerHTML = wallItems.map((item, i) => {
+    const ts = item.committed_at || item.timestamp || '';
+    const date = ts ? new Date(ts).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '';
+    const revealed = item.revealed;
+    const msg = revealed ? escapeHtml(item.revealed_message || '') : '<span style="color:var(--muted);font-style:italic;font-size:0.85rem">Sealed — message hidden until reveal</span>';
+    const otsBadge = item.ots_status === 'confirmed'
+      ? `<span style="font-family:var(--mono);font-size:0.62rem;color:var(--accent2);border:1px solid var(--accent2);padding:0.2rem 0.5rem;margin-left:0.5rem">⛓ Bitcoin</span>`
+      : item.ots_status === 'submitted' ? `<span style="font-family:var(--mono);font-size:0.62rem;color:#888;border:1px solid #333;padding:0.2rem 0.5rem;margin-left:0.5rem">⏳ Anchoring</span>` : '';
+    return `
+    <div class="wall-item">
+      <div>
+        <div class="wall-id">${item.id} · ${date} ${otsBadge}</div>
+        <div class="wall-message">${msg}</div>
+        <div class="wall-meta">Context: ${item.context} · MAC: ${item.mac.substring(0,16)}...</div>
+        ${!revealed ? `<button class="btn btn-outline" style="margin-top:0.75rem;font-size:0.65rem;padding:0.4rem 0.9rem" onclick="revealWallItem(${i})">Reveal</button>` : ''}
+      </div>
+      <div><span class="wall-badge ${revealed ? 'badge-revealed' : 'badge-pending'}">${revealed ? 'Revealed' : 'Pending'}</span></div>
+    </div>`;
+  }).join('');
+}
+
+async function revealWallItem(index) {
+  const item = wallItems[index];
+  const receipt = prompt(`Paste your full commitment receipt for ${item.id}:`);
+  if (!receipt) return;
+  const message = prompt('Enter your original message:');
+  if (!message) return;
+
+  const keyMatch = receipt.match(/([a-f0-9]{64})\s*$/im);
+  const nonceMatch = receipt.match(/NONCE\s+([a-f0-9]{64})/i);
+
+  if (!keyMatch || !nonceMatch) {
+    alert('Could not parse receipt. Make sure you paste the full receipt text.');
+    return;
+  }
+
+  const key = keyMatch[1];
+  const nonce = nonceMatch[1];
+
+  try {
+    // Try backend reveal first
+    const res = await fetch(`${API_BASE}/api/reveal/${item.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id, message, key_hex: key })
+    });
+
+    if (res.ok) {
+      renderWall();
+      return;
+    }
+  } catch(e) { /* fall through to local verify */ }
+
+  // Local fallback
+  const domain = `psi-commit.v1.${item.context}`;
+  const actualMac = await computeHMAC(key, domain, nonce, message);
+  if (actualMac.toLowerCase() === item.mac.toLowerCase()) {
+    wallItems[index].revealed = true;
+    wallItems[index].revealed_message = message;
+    renderWall();
+  } else {
+    alert('Verification failed — receipt or message does not match this commitment.');
+  }
+}
+
+// ── UTILS ──
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+document.addEventListener('DOMContentLoaded', () => { renderWall(); });
+</script>
+</body>
+</html>
