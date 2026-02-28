@@ -88,5 +88,17 @@ class Database:
         }).eq("id", commitment_id).execute()
 
 
+    async def get_pending_ots(self) -> List[dict]:
+        """Fetch all commitments that are submitted but not yet confirmed in Bitcoin."""
+        client = get_client()
+        result = (
+            client.table("commitments")
+            .select("id, mac, ots_receipt, ots_status")
+            .eq("ots_status", "submitted")
+            .execute()
+        )
+        return result.data or []
+
+
 # Singleton instance
 db = Database()
