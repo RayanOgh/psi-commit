@@ -280,6 +280,69 @@
     object-fit: cover;
   }
 
+  .btn-follow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.5rem 1.4rem;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--black);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+  }
+
+  .btn-follow:hover { background: #d9ff00; }
+
+  .btn-unfollow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.5rem 1.4rem;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-unfollow:hover { border-color: #ff6060; color: #ff6060; }
+
+  .search-result-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+
+  .search-result-item:last-child { border-bottom: none; }
+  .search-result-item:hover { background: #1a1a1a; }
+
+  .search-result-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .search-result-name {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--white);
+  }
+
+  .search-result-handle {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+
   .profile-info { flex: 1; }
 
   .profile-name {
@@ -1040,8 +1103,13 @@
       <img class="profile-avatar" id="profile-avatar" src="" alt="avatar">
     </div>
     <div class="profile-info">
-      <div class="profile-name" id="profile-name">—</div>
-      <div class="profile-handle" id="profile-handle">@—</div>
+      <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;margin-bottom:0.5rem">
+        <div>
+          <div class="profile-name" id="profile-name">—</div>
+          <div class="profile-handle" id="profile-handle">@—</div>
+        </div>
+        <div id="profile-action-btns" style="margin-top:0.5rem"></div>
+      </div>
       <div class="profile-stats">
         <div class="profile-stat">
           <div class="profile-stat-val" id="stat-public">0</div>
@@ -1267,7 +1335,13 @@
 
   <!-- WALL PANEL -->
   <div class="tab-panel" id="wall-panel">
-    <div class="app-card" style="max-width:100%">
+    <div style="margin-bottom:1.5rem;display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+      <input type="text" id="user-search" placeholder="Search users by username..." 
+        style="max-width:320px;padding:0.65rem 1rem;font-size:0.8rem"
+        oninput="searchUsers(this.value)">
+      <div id="search-results" style="display:none;position:absolute;background:#111;border:1px solid var(--border);min-width:280px;z-index:50;margin-top:2.5rem"></div>
+    </div>
+    <div class="app-card" style="max-width:100%;position:relative">
       <div id="wall-container">
         <div class="wall-empty" id="wall-empty">No public commitments yet.<br>
           <span style="color:#444;font-size:0.75rem;margin-top:0.5rem;display:block">Sign in and make a public commitment to appear here.</span>
@@ -1575,52 +1649,116 @@ function showMainPage() {
   document.getElementById('profile-page').classList.remove('active');
 }
 
-async function showProfile() {
+// viewingUserId = null means own profile
+let viewingUserId = null;
+
+async function showProfile(userId = null) {
   document.getElementById('user-dropdown').classList.remove('open');
   document.getElementById('main-page').classList.add('hidden');
   document.getElementById('profile-page').classList.add('active');
   window.scrollTo(0, 0);
-  await loadProfileData();
+  viewingUserId = userId;
+  await loadProfileData(userId);
 }
 
 // ── LOAD PROFILE DATA ──
-async function loadProfileData() {
-  if (!currentProfile) return;
+async function loadProfileData(userId = null) {
+  const targetId = userId || currentUser?.id;
+  if (!targetId) return;
 
-  const avatarUrl = currentProfile.avatar_url || getAvatarUrl(currentProfile.avatar_seed);
+  // Fetch profile
+  const { data: profile } = await sb
+    .from('profiles')
+    .select('*')
+    .eq('id', targetId)
+    .single();
+
+  if (!profile) return;
+
+  const isOwnProfile = !userId || userId === currentUser?.id;
+
+  // Show/hide private tab
+  document.querySelector('[onclick*="private"]').style.display = isOwnProfile ? 'block' : 'none';
+
+  const avatarUrl = profile.avatar_url || getAvatarUrl(profile.avatar_seed || targetId);
   document.getElementById('profile-avatar').src = avatarUrl;
-  document.getElementById('profile-name').textContent = currentProfile.full_name || currentProfile.username;
-  document.getElementById('profile-handle').textContent = '@' + currentProfile.username;
-  document.getElementById('stat-followers').textContent = currentProfile.followers_count || 0;
-  document.getElementById('stat-following').textContent = currentProfile.following_count || 0;
+  document.getElementById('profile-name').textContent = profile.full_name || profile.username;
+  document.getElementById('profile-handle').textContent = '@' + profile.username;
+  document.getElementById('stat-followers').textContent = profile.followers_count || 0;
+  document.getElementById('stat-following').textContent = profile.following_count || 0;
+
+  // Show follow/unfollow button or nothing for own profile
+  const actionBtns = document.getElementById('profile-action-btns');
+  if (!isOwnProfile && currentUser) {
+    // Check if already following
+    const { data: followRow } = await sb
+      .from('follows')
+      .select('follower_id')
+      .eq('follower_id', currentUser.id)
+      .eq('following_id', targetId)
+      .single();
+
+    const isFollowing = !!followRow;
+    actionBtns.innerHTML = isFollowing
+      ? `<button class="btn-unfollow" onclick="unfollowUser('${targetId}')">Following</button>`
+      : `<button class="btn-follow" onclick="followUser('${targetId}')">+ Follow</button>`;
+  } else {
+    actionBtns.innerHTML = '';
+  }
 
   // Load public commitments
   const { data: publicCommits } = await sb
     .from('commitments')
     .select('*')
-    .eq('user_id', currentUser.id)
+    .eq('user_id', targetId)
     .eq('visibility', 'public')
     .order('committed_at', { ascending: false });
 
-  // Load private commitments
-  const { data: privateCommits } = await sb
-    .from('commitments')
-    .select('*')
-    .eq('user_id', currentUser.id)
-    .eq('visibility', 'private')
-    .order('committed_at', { ascending: false });
-
-  const pubCount = publicCommits?.length || 0;
-  const privCount = privateCommits?.length || 0;
-
-  document.getElementById('stat-public').textContent = pubCount;
-  document.getElementById('stat-private').textContent = privCount;
-
-  // Update profile in DB
-  await sb.from('profiles').update({ public_commits_count: pubCount }).eq('id', currentUser.id);
-
+  document.getElementById('stat-public').textContent = publicCommits?.length || 0;
   renderProfileCommits('public-wall-container', publicCommits || []);
-  renderProfileCommits('private-wall-container', privateCommits || [], true);
+
+  if (isOwnProfile) {
+    const { data: privateCommits } = await sb
+      .from('commitments')
+      .select('*')
+      .eq('user_id', targetId)
+      .eq('visibility', 'private')
+      .order('committed_at', { ascending: false });
+
+    document.getElementById('stat-private').textContent = privateCommits?.length || 0;
+    renderProfileCommits('private-wall-container', privateCommits || [], true);
+
+    // Update public count in DB
+    await sb.from('profiles').update({ public_commits_count: publicCommits?.length || 0 }).eq('id', targetId);
+  }
+}
+
+// ── FOLLOW / UNFOLLOW ──
+async function followUser(targetId) {
+  if (!currentUser) { openModal(); return; }
+
+  await sb.from('follows').insert({ follower_id: currentUser.id, following_id: targetId });
+
+  // Increment counts
+  await sb.rpc('increment_followers', { target_id: targetId });
+  await sb.rpc('increment_following', { target_id: currentUser.id });
+
+  // Reload profile to show updated counts + button
+  await loadProfileData(targetId);
+}
+
+async function unfollowUser(targetId) {
+  if (!currentUser) return;
+
+  await sb.from('follows').delete()
+    .eq('follower_id', currentUser.id)
+    .eq('following_id', targetId);
+
+  // Decrement counts
+  await sb.rpc('decrement_followers', { target_id: targetId });
+  await sb.rpc('decrement_following', { target_id: currentUser.id });
+
+  await loadProfileData(targetId);
 }
 
 function renderProfileCommits(containerId, commits, isPrivate = false) {
@@ -1921,8 +2059,8 @@ function buildWallItem(item, isOwner = false) {
   if (item.profiles) {
     const av = item.profiles.avatar_url || getAvatarUrl(item.profiles.avatar_seed || item.user_id);
     userLine = `<div class="wall-user">
-      <img class="wall-user-avatar" src="${av}" alt="">
-      <span class="wall-user-name">@${escapeHtml(item.profiles.username || '')}</span>
+      <img class="wall-user-avatar" src="${av}" alt="" style="cursor:pointer" onclick="openUserProfile('${item.user_id}')">
+      <span class="wall-user-name" onclick="openUserProfile('${item.user_id}')" style="cursor:pointer">@${escapeHtml(item.profiles.username || '')}</span>
     </div>`;
   }
 
@@ -1940,6 +2078,56 @@ function buildWallItem(item, isOwner = false) {
     <div><span class="wall-badge ${revealed ? 'badge-revealed' : 'badge-pending'}">${revealed ? 'Revealed' : 'Pending'}</span></div>
   </div>`;
 }
+
+// ── SEARCH USERS ──
+let searchTimeout = null;
+async function searchUsers(query) {
+  const resultsEl = document.getElementById('search-results');
+  if (!query || query.length < 2) {
+    resultsEl.style.display = 'none';
+    return;
+  }
+
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(async () => {
+    const { data: users } = await sb
+      .from('profiles')
+      .select('id, username, full_name, avatar_url, avatar_seed, public_commits_count')
+      .ilike('username', `%${query}%`)
+      .limit(6);
+
+    if (!users?.length) {
+      resultsEl.style.display = 'none';
+      return;
+    }
+
+    resultsEl.style.display = 'block';
+    resultsEl.innerHTML = users.map(u => {
+      const av = u.avatar_url || getAvatarUrl(u.avatar_seed || u.id);
+      return `<div class="search-result-item" onclick="openUserProfile('${u.id}')">
+        <img class="search-result-avatar" src="${av}" alt="">
+        <div>
+          <div class="search-result-name">${escapeHtml(u.full_name || u.username)}</div>
+          <div class="search-result-handle">@${escapeHtml(u.username)} · ${u.public_commits_count || 0} commits</div>
+        </div>
+      </div>`;
+    }).join('');
+  }, 300);
+}
+
+function openUserProfile(userId) {
+  document.getElementById('search-results').style.display = 'none';
+  document.getElementById('user-search').value = '';
+  showProfile(userId);
+}
+
+// Close search results on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#user-search') && !e.target.closest('#search-results')) {
+    const r = document.getElementById('search-results');
+    if (r) r.style.display = 'none';
+  }
+});
 
 async function renderWall() {
   const grid = document.getElementById('wall-grid');
