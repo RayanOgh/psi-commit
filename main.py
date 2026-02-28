@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -17,8 +18,44 @@ from datetime import datetime
 from database import db
 from ots import anchor_commitment, check_ots_status
 
+
+# ── BACKGROUND OTS POLLER ──
+async def poll_ots_confirmations():
+    """
+    Runs every 30 minutes in the background.
+    Checks all submitted-but-unconfirmed commitments against Bitcoin.
+    Updates the database when a block is confirmed.
+    """
+    while True:
+        await asyncio.sleep(30 * 60)  # wait 30 minutes
+        try:
+            print("[OTS] Polling for Bitcoin confirmations...")
+            pending = await db.get_pending_ots()
+            for commitment in pending:
+                if commitment.get("ots_receipt"):
+                    status = await check_ots_status(
+                        commitment["id"],
+                        commitment["mac"],
+                        commitment["ots_receipt"]
+                    )
+                    if status.get("status") == "confirmed":
+                        print(f"[OTS] confirmed {commitment['id']} in Bitcoin block #{status.get('bitcoin_block')}")
+                    else:
+                        print(f"[OTS] Still pending: {commitment['id']}")
+        except Exception as e:
+            print(f"[OTS] Polling error: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(poll_ots_confirmations())
+    print("[OTS] Background Bitcoin confirmation poller started.")
+    yield
+    task.cancel()
+
+
 # ── APP SETUP ──
-app = FastAPI(title="PSI-COMMIT API", version="1.0.0")
+app = FastAPI(title="PSI-COMMIT API", version="1.0.0", lifespan=lifespan)
 
 # Allow your website to call the API
 app.add_middleware(
