@@ -122,19 +122,36 @@ async def upgrade_receipt(receipt_bytes: bytes) -> Optional[bytes]:
     """
     Try to upgrade a pending OTS receipt by fetching confirmation
     from calendar servers.
+    
+    OTS pending receipts contain a commitment hash that the calendar server
+    tracks. We send the commitment to the calendar and it returns an upgraded
+    receipt containing the Bitcoin block proof if confirmed.
     """
+    # Extract the commitment hash from the pending receipt
+    # The last 32 bytes of the pending receipt is the commitment hash
+    if len(receipt_bytes) < 32:
+        return None
+
+    commitment_hash = receipt_bytes[-32:]
+    commitment_hex = commitment_hash.hex()
+
     for calendar_url in OTS_CALENDARS:
         try:
-            # Send the pending receipt to get an upgraded (confirmed) version
             async with httpx.AsyncClient(timeout=30) as client:
-                response = await client.post(
-                    f"{calendar_url}/timestamp/",
-                    content=receipt_bytes,
-                    headers={"Content-Type": "application/octet-stream"}
+                # Correct OTS API: GET /timestamp/{hex_hash}
+                response = await client.get(
+                    f"{calendar_url}/timestamp/{commitment_hex}",
+                    headers={"Accept": "application/octet-stream"}
                 )
-                if response.status_code == 200:
+                if response.status_code == 200 and len(response.content) > 0:
+                    print(f"[OTS] Got upgraded receipt from {calendar_url} ({len(response.content)} bytes)")
                     return response.content
-        except Exception:
+                elif response.status_code == 404:
+                    print(f"[OTS] Not yet confirmed on {calendar_url}")
+                else:
+                    print(f"[OTS] {calendar_url} returned {response.status_code}")
+        except Exception as e:
+            print(f"[OTS] Error contacting {calendar_url}: {e}")
             continue
     return None
 
@@ -142,21 +159,49 @@ async def upgrade_receipt(receipt_bytes: bytes) -> Optional[bytes]:
 def parse_bitcoin_block(receipt_bytes: bytes) -> Optional[int]:
     """
     Extract Bitcoin block number from a confirmed OTS receipt.
-    OTS receipts are binary — look for block height bytes.
-    For production, use the opentimestamps Python library for proper parsing.
+    Uses the opentimestamps library for proper parsing.
+    Falls back to heuristic scanning if library unavailable.
     """
-    # Simple heuristic: block numbers are typically 6 digits in recent years
-    # For production use: pip install opentimestamps
-    # from opentimestamps.core.timestamp import Timestamp
-    # This is a simplified version — the opentimestamps library handles full parsing
+    # Try using the opentimestamps library first (proper parsing)
     try:
-        # Look for 4-byte big-endian integers that look like block numbers (700000-1000000)
+        from opentimestamps.core.timestamp import Timestamp, DetachedTimestampFile
+        from opentimestamps.core.op import OpSHA256, OpPrepend, OpAppend
+        from opentimestamps.calendar import RemoteCalendar
+        import io
+
+        # Parse the detached timestamp file
+        ctx = io.BytesIO(receipt_bytes)
+        detached = DetachedTimestampFile.deserialize(ctx)
+
+        # Walk the timestamp tree looking for Bitcoin attestations
+        def find_bitcoin_block(timestamp):
+            from opentimestamps.core.notary import BitcoinBlockHeaderAttestation
+            for attestation in timestamp.attestations:
+                if isinstance(attestation, BitcoinBlockHeaderAttestation):
+                    return attestation.height
+            for op, ts in timestamp.ops.items():
+                result = find_bitcoin_block(ts)
+                if result:
+                    return result
+            return None
+
+        block = find_bitcoin_block(detached.timestamp)
+        if block:
+            return block
+
+    except Exception:
+        pass
+
+    # Fallback: scan for 4-byte big-endian integers in Bitcoin block range
+    # Current Bitcoin block height is ~880,000-900,000
+    try:
         for i in range(len(receipt_bytes) - 4):
             val = int.from_bytes(receipt_bytes[i:i+4], 'big')
-            if 700_000 <= val <= 1_500_000:
+            if 800_000 <= val <= 1_500_000:
                 return val
     except Exception:
         pass
+
     return None
 
 
