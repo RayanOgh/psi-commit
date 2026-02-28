@@ -51,7 +51,7 @@ class Database:
             client.table("commitments")
             .select(
                 "id, mac, nonce, context, domain, committed_at, "
-                "revealed, revealed_message, ots_status, bitcoin_block"
+                "revealed, revealed_message, ots_status, bitcoin_block, ots_confirmed_at"
                 # Note: deliberately NOT selecting any secret key fields
             )
             .order("committed_at", desc=True)
