@@ -6,6 +6,7 @@
 <title>PSI-COMMIT — Prove You Said It First</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --black: #0a0a0a;
@@ -22,9 +23,7 @@
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
-
   html { scroll-behavior: smooth; }
-
   body {
     background: var(--black);
     color: var(--white);
@@ -34,7 +33,6 @@
     overflow-x: hidden;
   }
 
-  /* ── NOISE OVERLAY ── */
   body::before {
     content: '';
     position: fixed;
@@ -65,12 +63,14 @@
     letter-spacing: 0.15em;
     color: var(--accent);
     text-transform: uppercase;
+    text-decoration: none;
   }
 
   .nav-links {
     display: flex;
     gap: 2rem;
     list-style: none;
+    align-items: center;
   }
 
   .nav-links a {
@@ -84,6 +84,280 @@
   }
 
   .nav-links a:hover { color: var(--white); }
+
+  .nav-auth {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .btn-login {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.5rem 1.2rem;
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-login:hover {
+    background: var(--accent);
+    color: var(--black);
+  }
+
+  .nav-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid var(--border);
+    transition: border-color 0.2s;
+    object-fit: cover;
+  }
+
+  .nav-avatar:hover { border-color: var(--accent); }
+
+  .nav-user {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .nav-username {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--white);
+    letter-spacing: 0.05em;
+  }
+
+  .user-dropdown {
+    position: absolute;
+    top: calc(100% + 0.75rem);
+    right: 0;
+    background: #111;
+    border: 1px solid var(--border);
+    min-width: 160px;
+    display: none;
+    z-index: 200;
+  }
+
+  .user-dropdown.open { display: block; }
+
+  .dropdown-item {
+    display: block;
+    padding: 0.75rem 1rem;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    letter-spacing: 0.05em;
+    transition: all 0.15s;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dropdown-item:last-child { border-bottom: none; }
+  .dropdown-item:hover { background: #1a1a1a; color: var(--white); }
+  .dropdown-item.danger:hover { color: #ff6060; }
+
+  /* ── AUTH MODAL ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 500;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: #111;
+    border: 1px solid var(--border);
+    padding: 2.5rem;
+    max-width: 420px;
+    width: 90%;
+    position: relative;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+    font-family: var(--mono);
+  }
+
+  .modal-close:hover { color: var(--white); }
+
+  .modal-title {
+    font-family: var(--display);
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .modal-sub {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    line-height: 1.6;
+  }
+
+  .btn-google {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.9rem;
+    background: var(--white);
+    color: #111;
+    border: none;
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .btn-google:hover {
+    background: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  .google-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* ── PROFILE PAGE ── */
+  #profile-page {
+    display: none;
+    padding-top: 5rem;
+    min-height: 100vh;
+  }
+
+  #profile-page.active { display: block; }
+
+  .profile-header {
+    border-bottom: 1px solid var(--border);
+    padding: 4rem 2.5rem 3rem;
+    background: var(--mid);
+    display: flex;
+    gap: 2.5rem;
+    align-items: flex-start;
+  }
+
+  .profile-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .profile-avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    object-fit: cover;
+  }
+
+  .profile-info { flex: 1; }
+
+  .profile-name {
+    font-family: var(--display);
+    font-size: 3rem;
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+
+  .profile-handle {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 1.25rem;
+  }
+
+  .profile-stats {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .profile-stat {
+    text-align: center;
+  }
+
+  .profile-stat-val {
+    font-family: var(--display);
+    font-size: 1.8rem;
+    color: var(--white);
+    line-height: 1;
+  }
+
+  .profile-stat-label {
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 0.2rem;
+  }
+
+  .profile-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 2.5rem;
+    background: var(--mid);
+  }
+
+  .profile-tab {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 1rem 1.5rem;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+  }
+
+  .profile-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .profile-content {
+    padding: 2.5rem;
+  }
+
+  .profile-section { display: none; }
+  .profile-section.active { display: block; }
+
+  /* ── MAIN PAGE ── */
+  #main-page { display: block; }
+  #main-page.hidden { display: none; }
 
   /* ── HERO ── */
   #hero {
@@ -116,6 +390,7 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    animation: fadeUp 0.6s ease both;
   }
 
   .hero-tag::before {
@@ -133,12 +408,10 @@
     letter-spacing: 0.02em;
     color: var(--white);
     margin-bottom: 0.3em;
+    animation: fadeUp 0.6s ease 0.1s both;
   }
 
-  h1 span {
-    color: var(--accent);
-    display: block;
-  }
+  h1 span { color: var(--accent); display: block; }
 
   .hero-sub {
     font-size: 1.15rem;
@@ -147,12 +420,14 @@
     margin: 1.5rem 0 3rem;
     font-weight: 300;
     line-height: 1.7;
+    animation: fadeUp 0.6s ease 0.2s both;
   }
 
   .hero-actions {
     display: flex;
     gap: 1rem;
     flex-wrap: wrap;
+    animation: fadeUp 0.6s ease 0.3s both;
   }
 
   .btn {
@@ -199,6 +474,7 @@
     margin-top: 5rem;
     padding-top: 2rem;
     border-top: 1px solid var(--border);
+    animation: fadeUp 0.6s ease 0.4s both;
   }
 
   .stat-label {
@@ -271,27 +547,13 @@
     margin-bottom: 0.75rem;
   }
 
-  .step p {
-    font-size: 0.95rem;
-    color: #999;
-    line-height: 1.7;
-  }
+  .step p { font-size: 0.95rem; color: #999; line-height: 1.7; }
 
   /* ── USE CASES ── */
   #usecases {
     padding: 7rem 2.5rem;
     border-top: 1px solid var(--border);
     background: var(--mid);
-  }
-
-  #security {
-    padding: 7rem 2.5rem;
-    border-top: 1px solid var(--border);
-    background: var(--black);
-  }
-
-  @media (max-width: 768px) {
-    #security .trust-grid { grid-template-columns: 1fr !important; }
   }
 
   .cases-grid {
@@ -309,11 +571,7 @@
   }
 
   .case:hover { background: #222; }
-
-  .case-icon {
-    font-size: 1.8rem;
-    margin-bottom: 1rem;
-  }
+  .case-icon { font-size: 1.8rem; margin-bottom: 1rem; }
 
   .case h3 {
     font-family: var(--mono);
@@ -324,13 +582,9 @@
     margin-bottom: 0.75rem;
   }
 
-  .case p {
-    font-size: 0.9rem;
-    color: #888;
-    line-height: 1.7;
-  }
+  .case p { font-size: 0.9rem; color: #888; line-height: 1.7; }
 
-  /* ── MAIN APP ── */
+  /* ── APP ── */
   #app {
     padding: 7rem 2.5rem;
     border-top: 1px solid var(--border);
@@ -396,13 +650,35 @@
     line-height: 1.6;
   }
 
-  textarea:focus, input[type="text"]:focus {
-    border-color: var(--accent);
+  textarea:focus, input[type="text"]:focus { border-color: var(--accent); }
+  textarea { min-height: 120px; }
+  .field-group { margin-bottom: 1.5rem; }
+
+  /* Visibility toggle */
+  .visibility-toggle {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    width: fit-content;
+    margin-top: 0.5rem;
   }
 
-  textarea { min-height: 120px; }
+  .vis-btn {
+    padding: 0.5rem 1.2rem;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-right: 1px solid var(--border);
+    transition: all 0.2s;
+  }
 
-  .field-group { margin-bottom: 1.5rem; }
+  .vis-btn:last-child { border-right: none; }
+  .vis-btn.active { background: var(--accent); color: var(--black); }
 
   .result-box {
     background: var(--black);
@@ -462,20 +738,6 @@
 
   .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-  .warning-box {
-    background: rgba(200,240,0,0.06);
-    border: 1px solid rgba(200,240,0,0.3);
-    padding: 1rem 1.25rem;
-    margin-top: 1.5rem;
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    color: var(--accent);
-    line-height: 1.6;
-    display: none;
-  }
-
-  .warning-box.show { display: block; }
-
   .verify-result {
     padding: 1.5rem;
     margin-top: 1.5rem;
@@ -490,7 +752,6 @@
   .verify-result.show { display: flex; }
   .verify-result.valid { background: rgba(0,240,200,0.08); border: 1px solid rgba(0,240,200,0.4); color: var(--accent2); }
   .verify-result.invalid { background: rgba(255,60,60,0.08); border: 1px solid rgba(255,60,60,0.4); color: #ff6060; }
-
   .verify-icon { font-size: 1.5rem; }
 
   /* ── WALL ── */
@@ -504,11 +765,7 @@
     font-size: 0.85rem;
   }
 
-  .wall-grid {
-    display: grid;
-    gap: 1px;
-    background: var(--border);
-  }
+  .wall-grid { display: grid; gap: 1px; background: var(--border); }
 
   .wall-item {
     background: var(--mid);
@@ -529,18 +786,31 @@
     margin-bottom: 0.4rem;
   }
 
-  .wall-message {
-    font-size: 0.95rem;
-    color: var(--white);
-    margin-bottom: 0.5rem;
-    line-height: 1.5;
+  .wall-user {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
   }
 
-  .wall-meta {
+  .wall-user-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .wall-user-name {
     font-family: var(--mono);
     font-size: 0.68rem;
-    color: var(--muted);
+    color: var(--accent);
+    cursor: pointer;
   }
+
+  .wall-user-name:hover { text-decoration: underline; }
+
+  .wall-message { font-size: 0.95rem; color: var(--white); margin-bottom: 0.5rem; line-height: 1.5; }
+  .wall-meta { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); }
 
   .wall-badge {
     font-family: var(--mono);
@@ -554,6 +824,31 @@
 
   .badge-revealed { border-color: var(--accent2); color: var(--accent2); }
   .badge-pending { border-color: var(--border); color: var(--muted); }
+
+  /* ── LOGIN GATE ── */
+  .login-gate {
+    border: 1px solid var(--border);
+    padding: 3rem;
+    max-width: 480px;
+    text-align: center;
+    background: var(--mid);
+  }
+
+  .login-gate-icon { font-size: 2.5rem; margin-bottom: 1rem; }
+
+  .login-gate h3 {
+    font-family: var(--display);
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .login-gate p {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
 
   /* ── SECURITY ── */
   #security {
@@ -591,17 +886,8 @@
     color: #999;
   }
 
-  .sec-item::before {
-    content: '✓';
-    color: var(--accent);
-    font-family: var(--mono);
-    flex-shrink: 0;
-  }
-
-  .sec-item.no::before {
-    content: '✗';
-    color: #ff6060;
-  }
+  .sec-item::before { content: '✓'; color: var(--accent); font-family: var(--mono); flex-shrink: 0; }
+  .sec-item.no::before { content: '✗'; color: #ff6060; }
 
   /* ── FOOTER ── */
   footer {
@@ -614,18 +900,9 @@
     gap: 1rem;
   }
 
-  .footer-logo {
-    font-family: var(--mono);
-    font-size: 0.78rem;
-    letter-spacing: 0.15em;
-    color: var(--accent);
-  }
+  .footer-logo { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.15em; color: var(--accent); }
 
-  .footer-links {
-    display: flex;
-    gap: 2rem;
-    list-style: none;
-  }
+  .footer-links { display: flex; gap: 2rem; list-style: none; }
 
   .footer-links a {
     font-family: var(--mono);
@@ -638,24 +915,13 @@
   }
 
   .footer-links a:hover { color: var(--white); }
-
-  .footer-copy {
-    font-family: var(--mono);
-    font-size: 0.68rem;
-    color: var(--muted);
-  }
+  .footer-copy { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); }
 
   /* ── ANIMATIONS ── */
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
   }
-
-  .hero-tag { animation: fadeUp 0.6s ease both; }
-  h1 { animation: fadeUp 0.6s ease 0.1s both; }
-  .hero-sub { animation: fadeUp 0.6s ease 0.2s both; }
-  .hero-actions { animation: fadeUp 0.6s ease 0.3s both; }
-  .hero-stats { animation: fadeUp 0.6s ease 0.4s both; }
 
   @keyframes blink {
     0%, 100% { opacity: 1; }
@@ -691,23 +957,110 @@
     #app, #how, #usecases, #security { padding: 4rem 1.5rem; }
     .app-card { padding: 1.5rem; }
     footer { flex-direction: column; align-items: flex-start; }
+    .profile-header { flex-direction: column; padding: 2rem 1.5rem; }
+    .profile-content { padding: 1.5rem; }
   }
 </style>
 </head>
 <body>
 
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="auth-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-title">SIGN IN</div>
+    <div class="modal-sub">One account. All your commitments.<br>Your key never leaves your device.</div>
+    <button class="btn-google" onclick="signInWithGoogle()">
+      <svg class="google-icon" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Continue with Google
+    </button>
+    <div style="margin-top:1.5rem;font-family:var(--mono);font-size:0.65rem;color:var(--muted);text-align:center;line-height:1.7">
+      By signing in you agree to our terms.<br>
+      Your cryptographic keys never leave your browser.
+    </div>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav>
-  <div class="nav-logo">PSI — COMMIT</div>
+  <a class="nav-logo" href="#" onclick="showMainPage()">PSI — COMMIT</a>
   <ul class="nav-links">
     <li><a href="#how">How it works</a></li>
-    <li><a href="#app">Commit</a></li>
-    <li><a href="#app">Verify</a></li>
-    <li><a href="#app">Wall</a></li>
+    <li><a href="#app" onclick="showMainPage()">Commit</a></li>
+    <li><a href="#app" onclick="showMainPage()">Verify</a></li>
+    <li><a href="#app" onclick="showMainPage()">Wall</a></li>
     <li><a href="#security">Security</a></li>
     <li><a href="https://github.com/RayanOgh/psi-commit" target="_blank">GitHub</a></li>
   </ul>
+  <div class="nav-auth">
+    <!-- Shown when logged out -->
+    <button class="btn-login" id="btn-login" onclick="openModal()">Sign In</button>
+    <!-- Shown when logged in -->
+    <div class="nav-user" id="nav-user" style="display:none" onclick="toggleDropdown()">
+      <img class="nav-avatar" id="nav-avatar" src="" alt="avatar">
+      <span class="nav-username" id="nav-username"></span>
+      <div class="user-dropdown" id="user-dropdown">
+        <a class="dropdown-item" onclick="showProfile()">My Profile</a>
+        <a class="dropdown-item danger" onclick="signOut()">Sign Out</a>
+      </div>
+    </div>
+  </div>
 </nav>
+
+<!-- PROFILE PAGE -->
+<div id="profile-page">
+  <div class="profile-header">
+    <div class="profile-avatar-wrap">
+      <img class="profile-avatar" id="profile-avatar" src="" alt="avatar">
+    </div>
+    <div class="profile-info">
+      <div class="profile-name" id="profile-name">—</div>
+      <div class="profile-handle" id="profile-handle">@—</div>
+      <div class="profile-stats">
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="stat-public">0</div>
+          <div class="profile-stat-label">Public Commits</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="stat-private" style="color:var(--muted)">0</div>
+          <div class="profile-stat-label" style="color:#333">Private</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="stat-followers">0</div>
+          <div class="profile-stat-label">Followers</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="stat-following">0</div>
+          <div class="profile-stat-label">Following</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="profile-tabs">
+    <button class="profile-tab active" onclick="switchProfileTab('public', this)">Public Commitments</button>
+    <button class="profile-tab" onclick="switchProfileTab('private', this)">Private Commitments</button>
+  </div>
+  <div class="profile-content">
+    <div class="profile-section active" id="tab-public">
+      <div id="public-wall-container">
+        <div class="wall-empty">No public commitments yet.</div>
+      </div>
+    </div>
+    <div class="profile-section" id="tab-private">
+      <div id="private-wall-container">
+        <div class="wall-empty">No private commitments yet.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN PAGE -->
+<div id="main-page">
 
 <!-- HERO -->
 <section id="hero">
@@ -790,127 +1143,28 @@
   </div>
 </section>
 
-<!-- SECURITY -->
-<section id="security">
-  <div class="section-label">Trust Model</div>
-  <h2 class="section-title">DON'T TRUST US.<br>VERIFY EVERYTHING.</h2>
-
-  <div style="max-width:820px;margin:3rem auto 0">
-
-    <!-- The core promise -->
-    <div style="border:1px solid var(--accent);padding:2rem;margin-bottom:2rem;position:relative">
-      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;margin-bottom:1rem">CORE GUARANTEE</div>
-      <p style="font-size:1.15rem;line-height:1.8;color:var(--white)">
-        We cannot forge your commitments. We cannot change your timestamps. We cannot lie about when you committed — even if we wanted to. The math and Bitcoin make it impossible.
-      </p>
-    </div>
-
-    <!-- Three trust pillars -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border);margin-bottom:2rem">
-
-      <div style="background:var(--black);padding:1.75rem">
-        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">01 / YOUR KEY</div>
-        <div style="font-family:var(--display);font-size:1.4rem;margin-bottom:0.75rem">NEVER LEAVES<br>YOUR DEVICE</div>
-        <p style="font-size:0.82rem;color:#999;line-height:1.7">Your secret key is generated in your browser and never sent to our server. We store only the MAC — a mathematical fingerprint. Without your key, the message is permanently hidden.</p>
-      </div>
-
-      <div style="background:var(--black);padding:1.75rem">
-        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">02 / THE MATH</div>
-        <div style="font-family:var(--display);font-size:1.4rem;margin-bottom:0.75rem">HMAC-SHA256<br>IS BINDING</div>
-        <p style="font-size:0.82rem;color:#999;line-height:1.7">HMAC-SHA256 is a one-way function. Given a MAC, it is computationally impossible to find a different message that produces the same fingerprint — even with all the computing power on Earth.</p>
-      </div>
-
-      <div style="background:var(--black);padding:1.75rem">
-        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">03 / BITCOIN</div>
-        <div style="font-family:var(--display);font-size:1.4rem;margin-bottom:0.75rem">TIMESTAMP IS<br>PERMANENT</div>
-        <p style="font-size:0.82rem;color:#999;line-height:1.7">Every commitment is anchored to the Bitcoin blockchain via OpenTimestamps. Bitcoin is maintained by 10,000+ independent computers worldwide. Nobody controls it — not us, not you, not anyone.</p>
-      </div>
-
-    </div>
-
-    <!-- How verification works -->
-    <div style="border:1px solid var(--border);padding:2rem;margin-bottom:2rem">
-      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;margin-bottom:1.5rem">HOW VERIFICATION WORKS</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem">
-        <div>
-          <div style="font-family:var(--mono);font-size:0.72rem;color:var(--white);margin-bottom:0.5rem">When you commit:</div>
-          <ol style="font-size:0.82rem;color:#999;line-height:2;padding-left:1.2rem">
-            <li>Your browser generates a secret key</li>
-            <li>HMAC-SHA256 combines key + message → MAC</li>
-            <li>Only the MAC is sent to our server</li>
-            <li>MAC is anchored to Bitcoin via OTS</li>
-            <li>Your key and message stay on your device</li>
-          </ol>
-        </div>
-        <div>
-          <div style="font-family:var(--mono);font-size:0.72rem;color:var(--white);margin-bottom:0.5rem">When you reveal:</div>
-          <ol style="font-size:0.82rem;color:#999;line-height:2;padding-left:1.2rem">
-            <li>You provide your original message + key</li>
-            <li>Server recomputes HMAC independently</li>
-            <li>If it matches the stored MAC — verified</li>
-            <li>Bitcoin block proves the MAC existed before</li>
-            <li>Anyone can verify independently</li>
-          </ol>
-        </div>
-      </div>
-    </div>
-
-    <!-- Open source + independent verify -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);margin-bottom:2rem">
-      <div style="background:var(--black);padding:1.75rem">
-        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">OPEN SOURCE</div>
-        <p style="font-size:0.82rem;color:#999;line-height:1.7;margin-bottom:1rem">Every line of code is public on GitHub. You can audit exactly what our server does, run it yourself, or use the Python library directly without ever touching our website.</p>
-        <a href="https://github.com/RayanOgh/psi-commit" target="_blank" style="font-family:var(--mono);font-size:0.72rem;color:var(--accent);text-decoration:none">View source code ↗</a>
-      </div>
-      <div style="background:var(--black);padding:1.75rem">
-        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">INDEPENDENT VERIFICATION</div>
-        <p style="font-size:0.82rem;color:#999;line-height:1.7;margin-bottom:1rem">Bitcoin timestamps can be verified by anyone at opentimestamps.org using only your receipt file. No account needed. No trust in us required. The blockchain speaks for itself.</p>
-        <a href="https://opentimestamps.org" target="_blank" style="font-family:var(--mono);font-size:0.72rem;color:var(--accent);text-decoration:none">Verify at opentimestamps.org ↗</a>
-      </div>
-    </div>
-
-    <!-- What we can and cannot do -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)">
-      <div style="background:var(--black);padding:1.75rem">
-        <div style="font-family:var(--mono);font-size:0.65rem;color:#ff4444;letter-spacing:0.15em;margin-bottom:1rem">WHAT WE CANNOT DO</div>
-        <ul style="font-size:0.82rem;color:#999;line-height:2.2;list-style:none">
-          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Read your message before you reveal it</li>
-          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Change what you committed to</li>
-          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Backdate or alter your timestamp</li>
-          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Forge a commitment on your behalf</li>
-          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Prevent you from verifying independently</li>
-        </ul>
-      </div>
-      <div style="background:var(--black);padding:1.75rem">
-        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;margin-bottom:1rem">WHAT WE DO</div>
-        <ul style="font-size:0.82rem;color:#999;line-height:2.2;list-style:none">
-          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Store your public MAC and timestamp</li>
-          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Submit your MAC to Bitcoin via OTS</li>
-          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Verify your key matches on reveal</li>
-          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Maintain the public wall</li>
-          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Keep the code open source forever</li>
-        </ul>
-      </div>
-    </div>
-
-  </div>
-</section>
-
-
 <!-- APP -->
 <section id="app">
   <div class="section-label">Tool</div>
   <h2 class="section-title" style="margin-bottom:2rem">USE IT NOW.</h2>
 
   <div class="app-tabs">
-    <button class="tab active" onclick="switchTab('commit')">Commit</button>
-    <button class="tab" onclick="switchTab('verify')">Verify</button>
-    <button class="tab" onclick="switchTab('wall')">Wall</button>
+    <button class="tab active" onclick="switchTab('commit', event)">Commit</button>
+    <button class="tab" onclick="switchTab('verify', event)">Verify</button>
+    <button class="tab" onclick="switchTab('wall', event)">Wall</button>
   </div>
 
   <!-- COMMIT PANEL -->
   <div class="tab-panel active" id="commit-panel">
-    <div class="app-card">
+    <!-- Login gate (shown when logged out) -->
+    <div class="login-gate" id="commit-login-gate">
+      <div class="login-gate-icon">🔐</div>
+      <h3>SIGN IN TO COMMIT</h3>
+      <p>Create an account to seal your predictions and build a verifiable track record. Your cryptographic key never leaves your browser.</p>
+      <button class="btn btn-primary" onclick="openModal()">Sign in with Google →</button>
+    </div>
+    <!-- Commit form (shown when logged in) -->
+    <div class="app-card" id="commit-form" style="display:none">
       <div class="field-group">
         <label class="field-label" for="commit-message">Your message / prediction / hypothesis</label>
         <textarea id="commit-message" placeholder="e.g. The Fed will cut rates by 25bps at the March 2026 meeting&#10;&#10;Be specific. Be honest. The commitment is only as meaningful as the claim."></textarea>
@@ -919,28 +1173,29 @@
         <label class="field-label" for="commit-context">Context label (optional)</label>
         <input type="text" id="commit-context" placeholder="e.g. macro-forecast, clinical-trial-2026, team-bet" value="default">
       </div>
+      <div class="field-group">
+        <label class="field-label">Visibility</label>
+        <div class="visibility-toggle">
+          <button class="vis-btn active" id="vis-public" onclick="setVisibility('public')">🌐 Public</button>
+          <button class="vis-btn" id="vis-private" onclick="setVisibility('private')">🔒 Private</button>
+        </div>
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.5rem" id="vis-desc">Public commitments appear on your profile and the wall.</div>
+      </div>
       <button class="btn btn-primary" onclick="createCommitment()">Generate Commitment →</button>
 
-      <!-- COMMITMENT CARD -->
       <div class="result-box" id="commit-result">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
           <div style="font-family:var(--mono);font-size:0.68rem;letter-spacing:0.2em;color:var(--accent);text-transform:uppercase">Your Commitment Receipt</div>
           <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)" id="res-time"></div>
         </div>
-
-        <!-- CARD BODY -->
         <div id="commitment-card" style="background:var(--black);border:1px solid #333;padding:1.5rem;font-family:var(--mono);font-size:0.78rem;line-height:2;white-space:pre-wrap;word-break:break-all;color:#ccc"></div>
-
-        <!-- WARNING -->
         <div style="background:rgba(200,240,0,0.06);border:1px solid rgba(200,240,0,0.25);padding:1rem 1.25rem;margin-top:1.25rem;font-family:var(--mono);font-size:0.72rem;color:var(--accent);line-height:1.7">
-          ⚠ SAVE THIS RECEIPT. Your secret key is not stored anywhere — not on this server, not in your browser. If you lose it, you can never prove this commitment. Copy or download it now.
+          ⚠ SAVE THIS RECEIPT. Your secret key is not stored anywhere. If you lose it, you can never prove this commitment.
         </div>
-
-        <!-- ACTIONS -->
         <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Receipt</button>
           <button class="btn btn-outline" onclick="downloadPDF()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Save as PDF</button>
-          <button class="btn btn-outline" onclick="addToWall()" style="font-size:0.72rem;padding:0.7rem 1.4rem">+ Add to Public Wall</button>
+          <button class="btn btn-outline" onclick="addToWall()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="add-wall-btn">+ Add to Wall</button>
         </div>
       </div>
     </div>
@@ -949,15 +1204,11 @@
   <!-- VERIFY PANEL -->
   <div class="tab-panel" id="verify-panel">
     <div class="app-card">
-
-      <!-- STEP 1: PASTE RECEIPT -->
       <div class="field-group">
         <label class="field-label" for="verify-paste">Step 1 — Paste your commitment receipt</label>
-        <textarea id="verify-paste" placeholder="Paste your full commitment receipt here (the text you copied or saved as PDF)..." style="min-height:160px;font-size:0.78rem" oninput="parseReceipt()"></textarea>
+        <textarea id="verify-paste" placeholder="Paste your full commitment receipt here..." style="min-height:160px;font-size:0.78rem" oninput="parseReceipt()"></textarea>
         <div style="font-family:var(--mono);font-size:0.68rem;color:var(--muted);margin-top:0.5rem">Fields will fill automatically when you paste your receipt.</div>
       </div>
-
-      <!-- PARSED FIELDS (auto-filled, readonly) -->
       <div id="parsed-fields" style="display:none">
         <div style="font-family:var(--mono);font-size:0.68rem;letter-spacing:0.15em;color:var(--accent);text-transform:uppercase;margin-bottom:1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border)">Parsed from receipt ✓</div>
         <div class="field-group">
@@ -981,15 +1232,11 @@
           <input type="text" id="p-context" readonly style="cursor:default;opacity:0.8">
         </div>
       </div>
-
-      <!-- STEP 2: ENTER MESSAGE -->
       <div class="field-group">
         <label class="field-label" for="verify-message">Step 2 — Enter the original message to verify</label>
         <textarea id="verify-message" placeholder="Type or paste the original message exactly as it was committed..." style="min-height:80px"></textarea>
       </div>
-
       <button class="btn btn-primary" onclick="verifyCommitment()">Verify →</button>
-
       <div class="verify-result" id="verify-result">
         <span class="verify-icon" id="verify-icon"></span>
         <span id="verify-msg"></span>
@@ -999,11 +1246,10 @@
 
   <!-- WALL PANEL -->
   <div class="tab-panel" id="wall-panel">
-    <div class="app-card">
+    <div class="app-card" style="max-width:100%">
       <div id="wall-container">
-        <div class="wall-empty" id="wall-empty">
-          No public commitments yet.<br>
-          <span style="color:#444;font-size:0.75rem;margin-top:0.5rem;display:block">Make a commitment and add it to the wall to appear here.</span>
+        <div class="wall-empty" id="wall-empty">No public commitments yet.<br>
+          <span style="color:#444;font-size:0.75rem;margin-top:0.5rem;display:block">Sign in and make a public commitment to appear here.</span>
         </div>
         <div class="wall-grid" id="wall-grid" style="display:none"></div>
       </div>
@@ -1013,6 +1259,57 @@
 
 <!-- SECURITY -->
 <section id="security">
+  <div class="section-label">Trust Model</div>
+  <h2 class="section-title">DON'T TRUST US.<br>VERIFY EVERYTHING.</h2>
+  <div style="max-width:820px;margin:3rem auto 0">
+    <div style="border:1px solid var(--accent);padding:2rem;margin-bottom:2rem;position:relative">
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;margin-bottom:1rem">CORE GUARANTEE</div>
+      <p style="font-size:1.15rem;line-height:1.8;color:var(--white)">We cannot forge your commitments. We cannot change your timestamps. We cannot lie about when you committed — even if we wanted to. The math and Bitcoin make it impossible.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border);margin-bottom:2rem">
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">01 / YOUR KEY</div>
+        <div style="font-family:var(--display);font-size:1.4rem;margin-bottom:0.75rem">NEVER LEAVES<br>YOUR DEVICE</div>
+        <p style="font-size:0.82rem;color:#999;line-height:1.7">Your secret key is generated in your browser and never sent to our server. We store only the MAC — a mathematical fingerprint. Without your key, the message is permanently hidden.</p>
+      </div>
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">02 / THE MATH</div>
+        <div style="font-family:var(--display);font-size:1.4rem;margin-bottom:0.75rem">HMAC-SHA256<br>IS BINDING</div>
+        <p style="font-size:0.82rem;color:#999;line-height:1.7">HMAC-SHA256 is a one-way function. Given a MAC, it is computationally impossible to find a different message that produces the same fingerprint.</p>
+      </div>
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:0.75rem">03 / BITCOIN</div>
+        <div style="font-family:var(--display);font-size:1.4rem;margin-bottom:0.75rem">TIMESTAMP IS<br>PERMANENT</div>
+        <p style="font-size:0.82rem;color:#999;line-height:1.7">Every commitment is anchored to the Bitcoin blockchain via OpenTimestamps. Nobody controls it — not us, not you, not anyone.</p>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)">
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:#ff4444;letter-spacing:0.15em;margin-bottom:1rem">WHAT WE CANNOT DO</div>
+        <ul style="font-size:0.82rem;color:#999;line-height:2.2;list-style:none">
+          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Read your message before you reveal it</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Change what you committed to</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Backdate or alter your timestamp</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Forge a commitment on your behalf</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:#ff4444">✗</span> Prevent you from verifying independently</li>
+        </ul>
+      </div>
+      <div style="background:var(--black);padding:1.75rem">
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;margin-bottom:1rem">WHAT WE DO</div>
+        <ul style="font-size:0.82rem;color:#999;line-height:2.2;list-style:none">
+          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Store your public MAC and timestamp</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Submit your MAC to Bitcoin via OTS</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Verify your key matches on reveal</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Maintain the public wall</li>
+          <li style="display:flex;gap:0.5rem"><span style="color:var(--accent)">✓</span> Keep the code open source forever</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRANSPARENCY -->
+<section style="padding:7rem 2.5rem;border-top:1px solid var(--border)">
   <div class="section-label">Transparency</div>
   <h2 class="section-title">WHAT THIS<br>DOES & DOESN'T.</h2>
   <div class="security-grid">
@@ -1030,12 +1327,12 @@
       <div class="sec-item no">Anonymity — it doesn't hide who made the commitment</div>
       <div class="sec-item no">Forward secrecy — key compromise allows forging of that commitment</div>
       <div class="sec-item no">Byzantine fault tolerance — requires trust in the key holder</div>
-      <div class="sec-item no">Permanent immutable record — without OTS anchoring, the timestamp is ours</div>
+      <div class="sec-item no">Legal enforceability — cryptographic proof ≠ legal proof</div>
     </div>
   </div>
   <div style="margin-top:3rem;padding:2rem;border:1px solid var(--border);max-width:680px">
     <div class="section-label" style="margin-bottom:0.5rem">Open Source</div>
-    <p style="color:#999;font-size:0.9rem;line-height:1.7">The cryptographic core is MIT-licensed and publicly auditable. Don't trust us — read the code. Built on pure Python with zero dependencies.</p>
+    <p style="color:#999;font-size:0.9rem;line-height:1.7">The cryptographic core is MIT-licensed and publicly auditable. Don't trust us — read the code.</p>
     <a href="https://github.com/RayanOgh/psi-commit" target="_blank" class="btn btn-outline" style="margin-top:1.5rem;display:inline-flex">View Source on GitHub →</a>
   </div>
 </section>
@@ -1052,22 +1349,237 @@
   <div class="footer-copy">MIT License · HMAC-SHA256 · Zero Dependencies</div>
 </footer>
 
+</div><!-- end main-page -->
+
 <script>
-// ── STATE ──
-let currentCommitment = null;
-let wallItems = [];
+// ── SUPABASE ──
+const SUPABASE_URL = 'https://tdqlqemmlfcldhmtxziv.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkcWxxZW1tbGZjbGRobXR4eml2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyMzg0ODgsImV4cCI6MjA4NzgxNDQ4OH0.zDdr4uOIelx2CbNyMWmRaSN9TuNMA_eCBr2E98ElmWo';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
 
+// ── STATE ──
+let currentUser = null;
+let currentProfile = null;
+let currentCommitment = null;
+let wallItems = [];
+let commitVisibility = 'public';
+
+// ── AVATAR GENERATION ──
+// Generate a unique cartoon avatar URL using DiceBear API
+function getAvatarUrl(seed) {
+  return `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${encodeURIComponent(seed)}&backgroundColor=0a0a0a`;
+}
+
+// ── AUTH ──
+async function signInWithGoogle() {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin
+    }
+  });
+  if (error) alert('Sign in error: ' + error.message);
+}
+
+async function signOut() {
+  await supabase.auth.signOut();
+  currentUser = null;
+  currentProfile = null;
+  updateAuthUI(null);
+  showMainPage();
+}
+
+function openModal() {
+  document.getElementById('auth-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('auth-modal').classList.remove('open');
+}
+
+// Close modal on overlay click
+document.getElementById('auth-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ── PROFILE CREATION ──
+async function ensureProfile(user) {
+  // Check if profile exists
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+
+  if (existing) {
+    currentProfile = existing;
+    return existing;
+  }
+
+  // Create new profile
+  const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'user';
+  const username = name.toLowerCase().replace(/[^a-z0-9]/g, '') + Math.floor(Math.random() * 999);
+  const avatarSeed = user.id;
+  const avatarUrl = user.user_metadata?.avatar_url || getAvatarUrl(avatarSeed);
+
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .insert({
+      id: user.id,
+      username,
+      full_name: name,
+      avatar_url: avatarUrl,
+      avatar_seed: avatarSeed,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Profile creation error:', error);
+    return null;
+  }
+
+  currentProfile = profile;
+  return profile;
+}
+
+// ── UPDATE UI AFTER AUTH ──
+function updateAuthUI(user) {
+  const btnLogin = document.getElementById('btn-login');
+  const navUser = document.getElementById('nav-user');
+  const commitLoginGate = document.getElementById('commit-login-gate');
+  const commitForm = document.getElementById('commit-form');
+
+  if (user && currentProfile) {
+    btnLogin.style.display = 'none';
+    navUser.style.display = 'flex';
+
+    const avatarUrl = currentProfile.avatar_url || getAvatarUrl(currentProfile.avatar_seed || user.id);
+    document.getElementById('nav-avatar').src = avatarUrl;
+    document.getElementById('nav-username').textContent = '@' + currentProfile.username;
+
+    // Show commit form
+    if (commitLoginGate) commitLoginGate.style.display = 'none';
+    if (commitForm) commitForm.style.display = 'block';
+
+    closeModal();
+  } else {
+    btnLogin.style.display = 'block';
+    navUser.style.display = 'none';
+
+    // Show login gate
+    if (commitLoginGate) commitLoginGate.style.display = 'block';
+    if (commitForm) commitForm.style.display = 'none';
+  }
+}
+
+// ── DROPDOWN ──
+function toggleDropdown() {
+  document.getElementById('user-dropdown').classList.toggle('open');
+}
+
+document.addEventListener('click', function(e) {
+  if (!document.getElementById('nav-user').contains(e.target)) {
+    document.getElementById('user-dropdown').classList.remove('open');
+  }
+});
+
+// ── PAGE NAVIGATION ──
+function showMainPage() {
+  document.getElementById('main-page').classList.remove('hidden');
+  document.getElementById('profile-page').classList.remove('active');
+}
+
+async function showProfile() {
+  document.getElementById('user-dropdown').classList.remove('open');
+  document.getElementById('main-page').classList.add('hidden');
+  document.getElementById('profile-page').classList.add('active');
+  window.scrollTo(0, 0);
+  await loadProfileData();
+}
+
+// ── LOAD PROFILE DATA ──
+async function loadProfileData() {
+  if (!currentProfile) return;
+
+  const avatarUrl = currentProfile.avatar_url || getAvatarUrl(currentProfile.avatar_seed);
+  document.getElementById('profile-avatar').src = avatarUrl;
+  document.getElementById('profile-name').textContent = currentProfile.full_name || currentProfile.username;
+  document.getElementById('profile-handle').textContent = '@' + currentProfile.username;
+  document.getElementById('stat-followers').textContent = currentProfile.followers_count || 0;
+  document.getElementById('stat-following').textContent = currentProfile.following_count || 0;
+
+  // Load public commitments
+  const { data: publicCommits } = await supabase
+    .from('commitments')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .eq('visibility', 'public')
+    .order('committed_at', { ascending: false });
+
+  // Load private commitments
+  const { data: privateCommits } = await supabase
+    .from('commitments')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .eq('visibility', 'private')
+    .order('committed_at', { ascending: false });
+
+  const pubCount = publicCommits?.length || 0;
+  const privCount = privateCommits?.length || 0;
+
+  document.getElementById('stat-public').textContent = pubCount;
+  document.getElementById('stat-private').textContent = privCount;
+
+  // Update profile in DB
+  await supabase.from('profiles').update({ public_commits_count: pubCount }).eq('id', currentUser.id);
+
+  renderProfileCommits('public-wall-container', publicCommits || []);
+  renderProfileCommits('private-wall-container', privateCommits || [], true);
+}
+
+function renderProfileCommits(containerId, commits, isPrivate = false) {
+  const container = document.getElementById(containerId);
+  if (!commits.length) {
+    container.innerHTML = `<div class="wall-empty">No ${isPrivate ? 'private' : 'public'} commitments yet.</div>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="wall-grid">${commits.map(item => buildWallItem(item, true)).join('')}</div>`;
+}
+
+// ── SWITCH PROFILE TAB ──
+function switchProfileTab(name, el) {
+  document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.profile-section').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
 // ── TABS ──
-function switchTab(name) {
+function switchTab(name, event) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById(name + '-panel').classList.add('active');
-  event.target.classList.add('active');
+  if (event) event.target.classList.add('active');
   if (name === 'wall') renderWall();
 }
 
-// ── CRYPTO UTILS ──
+// ── VISIBILITY ──
+function setVisibility(v) {
+  commitVisibility = v;
+  document.getElementById('vis-public').classList.toggle('active', v === 'public');
+  document.getElementById('vis-private').classList.toggle('active', v === 'private');
+  document.getElementById('vis-desc').textContent = v === 'public'
+    ? 'Public commitments appear on your profile and the wall.'
+    : 'Private commitments are only visible to you on your profile.';
+  const wallBtn = document.getElementById('add-wall-btn');
+  if (wallBtn) wallBtn.style.display = v === 'public' ? 'inline-flex' : 'none';
+}
+
+// ── CRYPTO ──
 function bytesToHex(bytes) {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
@@ -1090,7 +1602,6 @@ async function computeHMAC(keyHex, domain, nonce, message) {
   const cryptoKey = await crypto.subtle.importKey(
     'raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
-  // Concatenate domain + nonce + message as bytes (matching Python implementation)
   const enc = new TextEncoder();
   const domainBytes = enc.encode(domain);
   const nonceBytes = hexToBytes(nonce);
@@ -1105,6 +1616,8 @@ async function computeHMAC(keyHex, domain, nonce, message) {
 
 // ── COMMIT ──
 async function createCommitment() {
+  if (!currentUser) { openModal(); return; }
+
   const message = document.getElementById('commit-message').value.trim();
   const context = document.getElementById('commit-context').value.trim() || 'default';
 
@@ -1121,15 +1634,15 @@ async function createCommitment() {
   const id = 'psc_' + mac.substring(0, 16);
   const timestamp = new Date().toISOString();
 
-  currentCommitment = { id, key, nonce, mac, domain, context, message, timestamp };
+  currentCommitment = { id, key, nonce, mac, domain, context, message, timestamp, visibility: commitVisibility };
 
-  // Build plain-text receipt card
   const card = [
     `PSI-COMMIT RECEIPT`,
     `${'─'.repeat(48)}`,
     `ID        ${id}`,
     `DATE      ${new Date(timestamp).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })}`,
     `CONTEXT   ${domain}`,
+    `VISIBILITY ${commitVisibility.toUpperCase()}`,
     `${'─'.repeat(48)}`,
     `MAC       ${mac}`,
     `NONCE     ${nonce}`,
@@ -1137,15 +1650,35 @@ async function createCommitment() {
     `SECRET KEY (keep private — do not share until reveal)`,
     `${key}`,
     `${'─'.repeat(48)}`,
-    `Verify at: psicommit.com/verify`,
+    `Verify at: psicommit.com`,
   ].join('\n');
 
   document.getElementById('commitment-card').textContent = card;
   document.getElementById('res-time').textContent = new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   document.getElementById('commit-result').classList.add('show');
+
+  // Update wall btn visibility
+  document.getElementById('add-wall-btn').style.display = commitVisibility === 'public' ? 'inline-flex' : 'none';
+
+  // Auto-save to Supabase if logged in
+  if (currentUser) {
+    try {
+      await fetch(`${API_BASE}/api/commit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id, mac, nonce, context, domain, timestamp,
+          user_id: currentUser.id,
+          visibility: commitVisibility
+        })
+      });
+    } catch(e) {
+      console.log('Auto-save failed, manual add still works');
+    }
+  }
 }
 
-// ── COPY CARD ──
+// ── COPY / PDF ──
 function copyCard() {
   const text = document.getElementById('commitment-card').textContent;
   navigator.clipboard.writeText(text).then(() => {
@@ -1156,7 +1689,6 @@ function copyCard() {
   });
 }
 
-// ── DOWNLOAD PDF ──
 function downloadPDF() {
   if (!currentCommitment) return;
   const card = document.getElementById('commitment-card').textContent;
@@ -1177,18 +1709,11 @@ function downloadPDF() {
   win.document.close();
 }
 
-// ── PARSE RECEIPT (auto-fill verify tab) ──
+// ── PARSE RECEIPT ──
 function parseReceipt() {
   const text = document.getElementById('verify-paste').value;
   const fields = document.getElementById('parsed-fields');
 
-  const extract = (label) => {
-    const regex = new RegExp(`${label}\\s+([a-zA-Z0-9_\\-\\.]+)`);
-    const match = text.match(regex);
-    return match ? match[1].trim() : '';
-  };
-
-  // Extract key (special case — it's on a line by itself after "SECRET KEY")
   const keyMatch = text.match(/SECRET KEY[^\n]*\n([a-f0-9]{64})/i);
   const macMatch = text.match(/MAC\s+([a-f0-9]{64})/i);
   const nonceMatch = text.match(/NONCE\s+([a-f0-9]{64})/i);
@@ -1247,7 +1772,7 @@ async function verifyCommitment() {
     resultEl.className = `verify-result show ${valid ? 'valid' : 'invalid'}`;
     iconEl.textContent = valid ? '✓' : '✗';
     msgEl.textContent = valid
-      ? 'VERIFIED — This commitment matches the message and key. The claim was made before reveal.'
+      ? 'VERIFIED — This commitment matches the message and key.'
       : 'FAILED — The commitment does not match. The message or key may have been altered.';
   } catch(e) {
     resultEl.className = 'verify-result show invalid';
@@ -1259,6 +1784,8 @@ async function verifyCommitment() {
 // ── WALL ──
 async function addToWall() {
   if (!currentCommitment) return;
+  if (!currentUser) { openModal(); return; }
+
   const btn = event.target;
   const orig = btn.textContent;
   btn.textContent = 'Adding...';
@@ -1275,40 +1802,77 @@ async function addToWall() {
         context: currentCommitment.context,
         domain: currentCommitment.domain,
         timestamp: currentCommitment.timestamp,
+        user_id: currentUser.id,
+        visibility: currentCommitment.visibility
       })
     });
     if (!res.ok) throw new Error();
     btn.textContent = '✓ Added!';
-    setTimeout(() => document.querySelectorAll('.tab')[2].click(), 600);
+    setTimeout(() => switchTab('wall'), 600);
   } catch(e) {
-    // Fallback: store locally if backend not running yet
-    const item = {
-      id: currentCommitment.id, mac: currentCommitment.mac,
-      context: currentCommitment.context, committed_at: currentCommitment.timestamp,
-      revealed: false, revealed_message: null, ots_status: 'local'
-    };
-    if (!wallItems.find(w => w.id === item.id)) wallItems.unshift(item);
-    document.querySelectorAll('.tab')[2].click();
-  } finally {
-    btn.textContent = orig;
-    btn.disabled = false;
+    btn.textContent = 'Error — try again';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
   }
+}
+
+function buildWallItem(item, isOwner = false) {
+  const ts = item.committed_at || item.timestamp || '';
+  const commitDate = ts ? new Date(ts).toLocaleString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '';
+  const revealed = item.revealed;
+  const msg = revealed
+    ? escapeHtml(item.revealed_message || '')
+    : '<span style="color:var(--muted);font-style:italic;font-size:0.85rem">Sealed — message hidden until reveal</span>';
+
+  let otsLine = '';
+  if (item.ots_status === 'confirmed' && item.bitcoin_block) {
+    otsLine = `<div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);margin-top:0.3rem">
+      ⛓ Bitcoin block #${item.bitcoin_block}
+      <a href="https://blockstream.info/block-height/${item.bitcoin_block}" target="_blank" style="color:var(--accent2);margin-left:0.4rem;opacity:0.7">verify ↗</a>
+    </div>`;
+  } else if (item.ots_status === 'submitted') {
+    otsLine = `<div style="font-family:var(--mono);font-size:0.65rem;color:#888;margin-top:0.3rem">⏳ Bitcoin anchoring in progress...</div>`;
+  }
+
+  // User avatar/name
+  let userLine = '';
+  if (item.profiles) {
+    const av = item.profiles.avatar_url || getAvatarUrl(item.profiles.avatar_seed || item.user_id);
+    userLine = `<div class="wall-user">
+      <img class="wall-user-avatar" src="${av}" alt="">
+      <span class="wall-user-name">@${escapeHtml(item.profiles.username || '')}</span>
+    </div>`;
+  }
+
+  return `
+  <div class="wall-item">
+    <div>
+      ${userLine}
+      <div class="wall-id">${item.id}</div>
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.2rem">Committed · ${commitDate}</div>
+      ${otsLine}
+      <div class="wall-message" style="margin-top:0.6rem">${msg}</div>
+      <div class="wall-meta">Context: ${item.context} · MAC: ${item.mac.substring(0,16)}...</div>
+      ${!revealed ? `<button class="btn btn-outline" style="margin-top:0.75rem;font-size:0.65rem;padding:0.4rem 0.9rem" onclick="revealItem('${item.id}')">Reveal</button>` : ''}
+    </div>
+    <div><span class="wall-badge ${revealed ? 'badge-revealed' : 'badge-pending'}">${revealed ? 'Revealed' : 'Pending'}</span></div>
+  </div>`;
 }
 
 async function renderWall() {
   const grid = document.getElementById('wall-grid');
   const empty = document.getElementById('wall-empty');
 
-  // Try real API first
   try {
     const res = await fetch(`${API_BASE}/api/wall`);
     if (res.ok) {
       const data = await res.json();
       wallItems = data.commitments || [];
     }
-  } catch(e) { /* use local wallItems */ }
+  } catch(e) {}
 
-  if (wallItems.length === 0) {
+  const publicItems = wallItems.filter(w => !w.visibility || w.visibility === 'public');
+
+  if (!publicItems.length) {
     empty.style.display = 'block';
     grid.style.display = 'none';
     return;
@@ -1316,44 +1880,11 @@ async function renderWall() {
 
   empty.style.display = 'none';
   grid.style.display = 'grid';
-  grid.innerHTML = wallItems.map((item, i) => {
-    const ts = item.committed_at || item.timestamp || '';
-    const commitDate = ts ? new Date(ts).toLocaleString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '';
-    const revealed = item.revealed;
-    const msg = revealed ? escapeHtml(item.revealed_message || '') : '<span style="color:var(--muted);font-style:italic;font-size:0.85rem">Sealed — message hidden until reveal</span>';
-
-    // Bitcoin anchoring display
-    let otsLine = '';
-    if (item.ots_status === 'confirmed' && item.bitcoin_block) {
-      const otsDate = item.ots_confirmed_at
-        ? new Date(item.ots_confirmed_at).toLocaleString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})
-        : '';
-      otsLine = `<div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);margin-top:0.3rem">
-        ⛓ Bitcoin anchored${otsDate ? ' · ' + otsDate : ''} · block #${item.bitcoin_block}
-        <a href="https://blockstream.info/block-height/${item.bitcoin_block}" target="_blank" style="color:var(--accent2);margin-left:0.4rem;opacity:0.7">verify ↗</a>
-      </div>`;
-    } else if (item.ots_status === 'submitted') {
-      otsLine = `<div style="font-family:var(--mono);font-size:0.65rem;color:#888;margin-top:0.3rem">⏳ Bitcoin anchoring in progress...</div>`;
-    }
-
-    return `
-    <div class="wall-item">
-      <div>
-        <div class="wall-id">${item.id}</div>
-        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.2rem">Committed · ${commitDate}</div>
-        ${otsLine}
-        <div class="wall-message" style="margin-top:0.6rem">${msg}</div>
-        <div class="wall-meta">Context: ${item.context} · MAC: ${item.mac.substring(0,16)}...</div>
-        ${!revealed ? `<button class="btn btn-outline" style="margin-top:0.75rem;font-size:0.65rem;padding:0.4rem 0.9rem" onclick="revealWallItem(${i})">Reveal</button>` : ''}
-      </div>
-      <div><span class="wall-badge ${revealed ? 'badge-revealed' : 'badge-pending'}">${revealed ? 'Revealed' : 'Pending'}</span></div>
-    </div>`;
-  }).join('');
+  grid.innerHTML = publicItems.map(item => buildWallItem(item)).join('');
 }
 
-async function revealWallItem(index) {
-  const item = wallItems[index];
-  const receipt = prompt(`Paste your full commitment receipt for ${item.id}:`);
+async function revealItem(commitmentId) {
+  const receipt = prompt(`Paste your full commitment receipt for ${commitmentId}:`);
   if (!receipt) return;
   const message = prompt('Enter your original message:');
   if (!message) return;
@@ -1362,45 +1893,58 @@ async function revealWallItem(index) {
   const nonceMatch = receipt.match(/NONCE\s+([a-f0-9]{64})/i);
 
   if (!keyMatch || !nonceMatch) {
-    alert('Could not parse receipt. Make sure you paste the full receipt text.');
+    alert('Could not parse receipt.');
     return;
   }
 
-  const key = keyMatch[1];
-  const nonce = nonceMatch[1];
-
   try {
-    // Try backend reveal first
-    const res = await fetch(`${API_BASE}/api/reveal/${item.id}`, {
+    const res = await fetch(`${API_BASE}/api/reveal/${commitmentId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: item.id, message, key_hex: key })
+      body: JSON.stringify({ id: commitmentId, message, key_hex: keyMatch[1] })
     });
-
     if (res.ok) {
       renderWall();
-      return;
+    } else {
+      const err = await res.json();
+      alert(err.detail || 'Verification failed');
     }
-  } catch(e) { /* fall through to local verify */ }
-
-  // Local fallback
-  const domain = `psi-commit.v1.${item.context}`;
-  const actualMac = await computeHMAC(key, domain, nonce, message);
-  if (actualMac.toLowerCase() === item.mac.toLowerCase()) {
-    wallItems[index].revealed = true;
-    wallItems[index].revealed_message = message;
-    renderWall();
-  } else {
-    alert('Verification failed — receipt or message does not match this commitment.');
+  } catch(e) {
+    alert('Error revealing commitment');
   }
 }
 
 // ── UTILS ──
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-document.addEventListener('DOMContentLoaded', () => { renderWall(); });
+// ── INIT ──
+document.addEventListener('DOMContentLoaded', async () => {
+  // Check for existing session
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) {
+    currentUser = session.user;
+    await ensureProfile(session.user);
+    updateAuthUI(session.user);
+  }
+
+  // Listen for auth changes
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (session?.user) {
+      currentUser = session.user;
+      await ensureProfile(session.user);
+      updateAuthUI(session.user);
+    } else {
+      currentUser = null;
+      currentProfile = null;
+      updateAuthUI(null);
+    }
+  });
+
+  renderWall();
+  setVisibility('public');
+});
 </script>
 </body>
 </html>
