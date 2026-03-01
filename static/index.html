@@ -1678,7 +1678,7 @@
 
 <!-- CREATE WALL MODAL -->
 <div class="modal-overlay" id="create-wall-modal" onclick="if(event.target===this)closeCreateWall()">
-  <div class="modal-box" style="max-width:460px">
+  <div class="modal" style="max-width:460px">
     <div class="modal-title">Create Private Wall</div>
     <div class="field-group">
       <label class="field-label">Wall Name</label>
@@ -1697,7 +1697,7 @@
 
 <!-- WALL INVITE MODAL -->
 <div class="modal-overlay" id="wall-invite-modal" onclick="if(event.target===this)closeWallInvite()">
-  <div class="modal-box" style="max-width:460px">
+  <div class="modal" style="max-width:460px">
     <div class="modal-title" id="wall-invite-title">Wall Created!</div>
     <p style="color:#999;font-size:0.85rem;margin-bottom:1.5rem">Share this invite link with people you want to add to your wall.</p>
     <div style="background:#111;border:1px solid var(--border);padding:1rem;font-family:var(--mono);font-size:0.72rem;word-break:break-all;color:var(--accent)" id="wall-invite-link"></div>
@@ -2114,17 +2114,22 @@ async function loadMyWalls() {
   const container = document.getElementById('my-walls-container');
   if (!container || !currentUser) return;
 
+  try {
   // Get walls I created
-  const { data: created } = await sb.from('private_walls')
+  const { data: created, error: e1 } = await sb.from('private_walls')
     .select('*')
     .eq('creator_id', currentUser.id)
     .order('created_at', { ascending: false });
 
+  if (e1) { console.warn('[Walls] Error loading created walls:', e1.message); }
+
   // Get walls I'm an approved member of
-  const { data: memberships } = await sb.from('wall_members')
+  const { data: memberships, error: e2 } = await sb.from('wall_members')
     .select('wall_id, status')
     .eq('user_id', currentUser.id)
     .eq('status', 'approved');
+
+  if (e2) { console.warn('[Walls] Error loading memberships:', e2.message); }
 
   let memberWalls = [];
   if (memberships?.length) {
@@ -2136,10 +2141,12 @@ async function loadMyWalls() {
   }
 
   // Get pending requests
-  const { data: pending } = await sb.from('wall_members')
+  const { data: pending, error: e3 } = await sb.from('wall_members')
     .select('wall_id')
     .eq('user_id', currentUser.id)
     .eq('status', 'pending');
+
+  if (e3) { console.warn('[Walls] Error loading pending:', e3.message); }
 
   const allWalls = [
     ...(created || []).map(w => ({ ...w, role: 'leader' })),
@@ -2176,6 +2183,10 @@ async function loadMyWalls() {
   }
   html += '</div>';
   container.innerHTML = html;
+  } catch(e) {
+    console.warn('[Walls] loadMyWalls failed:', e);
+    container.innerHTML = '<div class="wall-empty">Could not load walls. Please try again.</div>';
+  }
 }
 
 async function openWallPage(wallId) {
@@ -2184,7 +2195,7 @@ async function openWallPage(wallId) {
   // Hide all pages, show wall page
   document.getElementById('profile-page').classList.remove('active');
   document.getElementById('main-page').classList.add('hidden');
-  document.getElementById('wall-page').style.display = 'block'; document.getElementById('profile-page').classList.remove('active');
+  document.getElementById('wall-page').style.display = 'block';
   window.scrollTo(0, 0);
 
   const { data: wall } = await sb.from('private_walls').select('*').eq('id', wallId).single();
