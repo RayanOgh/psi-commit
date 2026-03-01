@@ -1676,38 +1676,6 @@
   <div class="footer-copy">MIT License · HMAC-SHA256 · Bitcoin-anchored via OpenTimestamps</div>
 </footer>
 
-<!-- CREATE WALL MODAL -->
-<div class="modal-overlay" id="create-wall-modal" onclick="if(event.target===this)closeCreateWall()">
-  <div class="modal" style="max-width:460px">
-    <div class="modal-title">Create Private Wall</div>
-    <div class="field-group">
-      <label class="field-label">Wall Name</label>
-      <input type="text" id="new-wall-name" placeholder="e.g. My Prediction Group" maxlength="60">
-    </div>
-    <div class="field-group">
-      <label class="field-label">Description (optional)</label>
-      <textarea id="new-wall-desc" placeholder="What is this wall for?" style="min-height:80px"></textarea>
-    </div>
-    <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
-      <button class="btn btn-primary" onclick="createPrivateWall()" style="flex:1">Create Wall →</button>
-      <button class="btn btn-outline" onclick="closeCreateWall()">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- WALL INVITE MODAL -->
-<div class="modal-overlay" id="wall-invite-modal" onclick="if(event.target===this)closeWallInvite()">
-  <div class="modal" style="max-width:460px">
-    <div class="modal-title" id="wall-invite-title">Wall Created!</div>
-    <p style="color:#999;font-size:0.85rem;margin-bottom:1.5rem">Share this invite link with people you want to add to your wall.</p>
-    <div style="background:#111;border:1px solid var(--border);padding:1rem;font-family:var(--mono);font-size:0.72rem;word-break:break-all;color:var(--accent)" id="wall-invite-link"></div>
-    <div style="display:flex;gap:0.75rem;margin-top:1rem">
-      <button class="btn btn-primary" onclick="copyWallLink()" style="flex:1">Copy Link</button>
-      <button class="btn btn-outline" onclick="closeWallInvite()">Done</button>
-    </div>
-  </div>
-</div>
-
 <!-- WALL VIEW PAGE -->
 <div id="wall-page" style="display:none;padding:6rem 2.5rem 4rem;max-width:900px;margin:0 auto">
   <button onclick="backFromWall()" style="background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:0.72rem;cursor:pointer;margin-bottom:2rem;padding:0">← Back</button>
@@ -3414,5 +3382,37 @@ function showDirectory() {
   alert('Directory coming soon!');
 }
 </script>
+<!-- CREATE WALL MODAL -->
+<div class="modal-overlay" id="create-wall-modal" onclick="if(event.target===this)closeCreateWall()">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-title">Create Private Wall</div>
+    <div class="field-group">
+      <label class="field-label">Wall Name</label>
+      <input type="text" id="new-wall-name" placeholder="e.g. My Prediction Group" maxlength="60">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Description (optional)</label>
+      <textarea id="new-wall-desc" placeholder="What is this wall for?" style="min-height:80px"></textarea>
+    </div>
+    <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
+      <button class="btn btn-primary" onclick="createPrivateWall()" style="flex:1">Create Wall →</button>
+      <button class="btn btn-outline" onclick="closeCreateWall()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- WALL INVITE MODAL -->
+<div class="modal-overlay" id="wall-invite-modal" onclick="if(event.target===this)closeWallInvite()">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-title" id="wall-invite-title">Wall Created!</div>
+    <p style="color:#999;font-size:0.85rem;margin-bottom:1.5rem">Share this invite link with people you want to add to your wall.</p>
+    <div style="background:#111;border:1px solid var(--border);padding:1rem;font-family:var(--mono);font-size:0.72rem;word-break:break-all;color:var(--accent)" id="wall-invite-link"></div>
+    <div style="display:flex;gap:0.75rem;margin-top:1rem">
+      <button class="btn btn-primary" onclick="copyWallLink()" style="flex:1">Copy Link</button>
+      <button class="btn btn-outline" onclick="closeWallInvite()">Done</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
