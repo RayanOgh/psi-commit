@@ -30,7 +30,7 @@ def _deserialize_ots(ots_bytes: bytes):
     """Deserialize .ots bytes using the correct opentimestamps context."""
     from opentimestamps.core.timestamp import DetachedTimestampFile
     from opentimestamps.core.serialize import StreamDeserializationContext
-    ctx = StreamDeserializationContext(ots_bytes)
+    ctx = StreamDeserializationContext(io.BytesIO(ots_bytes))
     return DetachedTimestampFile.deserialize(ctx)
 
 
