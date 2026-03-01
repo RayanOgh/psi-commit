@@ -15,7 +15,7 @@ import os
 import asyncio
 from datetime import datetime
 
-from database import db, get_client
+from database import db
 from ots import anchor_commitment, check_ots_status
 
 
@@ -88,55 +88,6 @@ class RevealPost(BaseModel):
 @app.get("/")
 async def serve_frontend():
     return FileResponse("static/index.html")
-
-
-@app.get("/wall/{invite_code}")
-async def serve_wall_invite(invite_code: str):
-    # Serve the frontend — JS will handle the invite code from the URL path
-    return FileResponse("static/index.html")
-
-
-@app.get("/api/wall/invite/{invite_code}")
-async def resolve_invite(invite_code: str):
-    """Resolve an invite code to wall info. Works for unauthenticated users (bypasses RLS)."""
-    try:
-        client = get_client()
-        print(f"[INVITE] Resolving invite code: {invite_code}")
-        result = (
-            client.table("private_walls")
-            .select("id, name, description, creator_id, invite_code")
-            .eq("invite_code", invite_code)
-            .limit(1)
-            .execute()
-        )
-        print(f"[INVITE] Query result: {result.data}")
-        if not result.data:
-            raise HTTPException(status_code=404, detail="Wall not found")
-
-        wall = result.data[0]
-
-        # Get creator profile
-        profile_result = (
-            client.table("profiles")
-            .select("username")
-            .eq("id", wall["creator_id"])
-            .limit(1)
-            .execute()
-        )
-        creator_username = profile_result.data[0]["username"] if profile_result.data else None
-
-        return {
-            "id": wall["id"],
-            "name": wall["name"],
-            "description": wall.get("description"),
-            "creator_id": wall["creator_id"],
-            "creator_username": creator_username,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[INVITE] Error resolving invite: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/commit")
