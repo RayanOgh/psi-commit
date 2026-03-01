@@ -161,6 +161,14 @@ async def ots_diagnostics():
         "sample_checks": [],
     }
 
+    # 0. Check opentimestamps library availability
+    try:
+        from opentimestamps.core.timestamp import DetachedTimestampFile
+        from opentimestamps.core.notary import BitcoinBlockHeaderAttestation
+        results["ots_library"] = "installed"
+    except ImportError as e:
+        results["ots_library"] = f"NOT INSTALLED: {e}"
+
     # 1. Check calendar connectivity
     test_digest = hashlib.sha256(b"psi-commit-diagnostic-test").digest()
     for cal_url in OTS_CALENDARS:
@@ -197,6 +205,15 @@ async def ots_diagnostics():
 
     for c in (submitted.data or []):
         try:
+            # Report current .ots file info
+            stored_ots = bytes.fromhex(c["ots_receipt"]) if c.get("ots_receipt") else None
+            ots_info = {}
+            if stored_ots:
+                ots_info["stored_size"] = len(stored_ots)
+                ots_info["has_magic"] = stored_ots[:15] == b'\x00OpenTimestamps'
+                # Check if digest is at correct position (bytes 33-65)
+                ots_info["format"] = "correct" if len(stored_ots) >= 65 else "too_short"
+
             digest = build_ots_submit_digest(c["id"], c["mac"], c.get("committed_at", ""), c.get("ots_digest"))
             upgraded = await upgrade_receipt(digest)
             if upgraded:
@@ -208,12 +225,14 @@ async def ots_diagnostics():
                         "id": c["id"],
                         "result": "confirmed",
                         "bitcoin_block": block_num,
+                        "ots_file": ots_info,
                     })
                 else:
                     results["sample_checks"].append({
                         "id": c["id"],
                         "result": "upgraded_but_no_block",
                         "upgraded_bytes": len(upgraded),
+                        "ots_file": ots_info,
                     })
             else:
                 results["sample_checks"].append({
@@ -221,6 +240,7 @@ async def ots_diagnostics():
                     "result": "still_pending",
                     "committed_at": c.get("committed_at"),
                     "digest_prefix": digest.hex()[:16],
+                    "ots_file": ots_info,
                 })
         except Exception as e:
             results["sample_checks"].append({
@@ -255,54 +275,59 @@ async def ots_diagnostics():
 async def ots_repair():
     """
     Repair OTS issues:
-    1. Resubmit commitments stuck at 'pending' (never submitted to calendar)
-    2. Fix malformed .ots files on 'submitted' commitments (had digest embedded incorrectly)
+    1. Resubmit commitments stuck at 'pending' (never submitted)
+    2. Resubmit commitments with malformed .ots files
     """
+    from ots import build_ots_submit_digest
     client = get_client()
-    results = {"resubmitted": [], "fixed_ots": [], "errors": []}
+    results = {"resubmitted": [], "already_ok": [], "errors": []}
 
-    # 1. Resubmit stuck 'pending' commitments
-    stuck = client.table("commitments").select(
-        "id, mac, committed_at, ots_digest"
-    ).eq("ots_status", "pending").execute()
+    # Get ALL non-confirmed commitments
+    needs_check = client.table("commitments").select(
+        "id, mac, committed_at, ots_digest, ots_receipt, ots_status"
+    ).neq("ots_status", "confirmed").execute()
 
-    for c in (stuck.data or []):
+    HEADER_LEN = 33  # magic(31) + version(1) + hash_op(1)
+
+    for c in (needs_check.data or []):
         try:
-            asyncio.create_task(anchor_commitment(
-                c["id"], c["mac"],
-                timestamp=c.get("committed_at", ""),
-                psc_digest=c.get("ots_digest")
-            ))
-            results["resubmitted"].append(c["id"])
-        except Exception as e:
-            results["errors"].append({"id": c["id"], "step": "resubmit", "error": str(e)})
+            digest = build_ots_submit_digest(
+                c["id"], c["mac"], c.get("committed_at", ""), c.get("ots_digest")
+            )
 
-    # 2. Fix malformed .ots files (old format had digest embedded at bytes 33-65)
-    submitted = client.table("commitments").select(
-        "id, ots_receipt"
-    ).eq("ots_status", "submitted").not_.is_("ots_receipt", "null").execute()
+            needs_resubmit = False
 
-    OTS_HEADER_LEN = 33  # magic(31) + version(1) + hash_op(1)
-
-    for c in (submitted.data or []):
-        try:
-            ots_bytes = bytes.fromhex(c["ots_receipt"])
-            # Check if file has the old malformed format (digest embedded after header)
-            # Old format: header(33) + varint(1) + digest(32) + calendar_body
-            # New format: header(33) + calendar_body
-            if len(ots_bytes) > OTS_HEADER_LEN + 33:
-                # Check if byte 33 is 0x20 (varint for 32) — sign of old format
-                if ots_bytes[OTS_HEADER_LEN] == 0x20:
-                    # Strip the varint(1 byte) + digest(32 bytes)
-                    fixed = ots_bytes[:OTS_HEADER_LEN] + ots_bytes[OTS_HEADER_LEN + 33:]
-                    client.table("commitments").update({
-                        "ots_receipt": fixed.hex()
-                    }).eq("id", c["id"]).execute()
-                    results["fixed_ots"].append(c["id"])
+            if not c.get("ots_receipt"):
+                # Never submitted
+                needs_resubmit = True
+            else:
+                ots_bytes = bytes.fromhex(c["ots_receipt"])
+                # Check correct format: header(33) + digest(32) + calendar_body
+                if len(ots_bytes) < HEADER_LEN + 32:
+                    needs_resubmit = True
+                elif ots_bytes[HEADER_LEN:HEADER_LEN + 32] != digest:
+                    # Digest not at correct position — malformed
+                    needs_resubmit = True
                 else:
-                    results["fixed_ots"].append({"id": c["id"], "status": "already_correct"})
+                    results["already_ok"].append(c["id"])
+                    continue
+
+            if needs_resubmit:
+                # Reset to pending and resubmit
+                client.table("commitments").update({
+                    "ots_status": "pending",
+                    "ots_receipt": None,
+                }).eq("id", c["id"]).execute()
+
+                asyncio.create_task(anchor_commitment(
+                    c["id"], c["mac"],
+                    timestamp=c.get("committed_at", ""),
+                    psc_digest=c.get("ots_digest")
+                ))
+                results["resubmitted"].append(c["id"])
+
         except Exception as e:
-            results["errors"].append({"id": c["id"], "step": "fix_ots", "error": str(e)})
+            results["errors"].append({"id": c["id"], "error": str(e)})
 
     return results
 
@@ -392,21 +417,22 @@ async def verify_ots(request: Request):
         raise HTTPException(status_code=400, detail="Missing ots_hex or stamp_digest")
 
     try:
-        from ots import upgrade_receipt, parse_bitcoin_block, build_ots_submit_digest
-        import hashlib
+        from ots import upgrade_receipt, parse_bitcoin_block, build_detached_ots_file
 
         ots_bytes = bytes.fromhex(ots_hex)
         digest = bytes.fromhex(stamp_digest)
 
-        # Try to upgrade/confirm the receipt from calendars
+        # Try to get confirmed receipt from calendars
         upgraded = await upgrade_receipt(digest)
 
         if upgraded:
-            block_num = parse_bitcoin_block(upgraded)
+            # Wrap in proper .ots file before parsing
+            ots_file = build_detached_ots_file(digest, upgraded, "confirmed")
+            block_num = parse_bitcoin_block(ots_file)
             if block_num:
                 return {"status": "confirmed", "bitcoin_block": block_num}
 
-        # Check if the existing ots_bytes are already confirmed
+        # Check if the uploaded .ots file is already confirmed
         block_num = parse_bitcoin_block(ots_bytes)
         if block_num:
             return {"status": "confirmed", "bitcoin_block": block_num}
