@@ -2465,20 +2465,23 @@ function closeAddCommitModal() {
 // Handle invite link — check if URL has /wall/{code}
 async function handleWallInviteLink() {
   const path = window.location.pathname;
-  const match = path.match(/^\/wall\/([a-zA-Z0-9]+)$/);
+  const match = path.match(/^\/wall\/([a-zA-Z0-9_-]+)$/);
   if (!match) return false;
 
   const inviteCode = match[1];
   // Store for post-login redirect
   sessionStorage.setItem('psi_pending_invite', inviteCode);
 
-  const { data: wall } = await sb.from('private_walls')
-    .select('*, profiles(username)')
-    .eq('invite_code', inviteCode)
-    .single();
+  // Use backend API (bypasses RLS — works for unauthenticated users)
+  let wall = null;
+  try {
+    const resp = await fetch(`${API_BASE}/api/wall/invite/${inviteCode}`);
+    if (resp.ok) wall = await resp.json();
+  } catch (e) {
+    console.warn('[Wall] Failed to resolve invite:', e);
+  }
 
   if (!wall) {
-    // Show 404-like message
     document.getElementById('main-page').classList.add('hidden');
     document.getElementById('join-request-page').style.display = 'block';
     document.getElementById('join-wall-name').textContent = 'Wall not found.';
@@ -2511,7 +2514,7 @@ async function handleWallInviteLink() {
       document.getElementById('join-request-page').style.display = 'block';
       document.getElementById('join-wall-name').textContent = wall.name;
       document.getElementById('join-wall-desc').textContent = wall.description || '';
-      document.getElementById('join-wall-leader').textContent = wall.profiles?.username ? `Created by @${wall.profiles.username}` : '';
+      document.getElementById('join-wall-leader').textContent = wall.creator_username ? `Created by @${wall.creator_username}` : '';
       document.getElementById('join-request-btn').textContent = 'Request Already Sent';
       document.getElementById('join-request-btn').disabled = true;
       document.getElementById('join-request-page').dataset.wallId = wall.id;
@@ -2524,7 +2527,7 @@ async function handleWallInviteLink() {
   document.getElementById('join-request-page').style.display = 'block';
   document.getElementById('join-wall-name').textContent = wall.name;
   document.getElementById('join-wall-desc').textContent = wall.description || '';
-  document.getElementById('join-wall-leader').textContent = wall.profiles?.username ? `Created by @${wall.profiles.username}` : '';
+  document.getElementById('join-wall-leader').textContent = wall.creator_username ? `Created by @${wall.creator_username}` : '';
   document.getElementById('join-request-page').dataset.wallId = wall.id;
   if (!currentUser) {
     document.getElementById('join-request-btn').textContent = 'Sign In to Request Access';
