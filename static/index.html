@@ -2059,17 +2059,17 @@ let currentWallInviteCode = null;
 
 function openCreateWall() {
   if (!currentUser) { openModal(); return; }
-  document.getElementById('create-wall-modal').style.display = 'flex';
+  document.getElementById('create-wall-modal').classList.add('open');
 }
 
 function closeCreateWall() {
-  document.getElementById('create-wall-modal').style.display = 'none';
+  document.getElementById('create-wall-modal').classList.remove('open');
   document.getElementById('new-wall-name').value = '';
   document.getElementById('new-wall-desc').value = '';
 }
 
 function closeWallInvite() {
-  document.getElementById('wall-invite-modal').style.display = 'none';
+  document.getElementById('wall-invite-modal').classList.remove('open');
 }
 
 async function createPrivateWall() {
@@ -2094,7 +2094,7 @@ async function createPrivateWall() {
   const link = `${window.location.origin}/wall/${data.invite_code}`;
   document.getElementById('wall-invite-title').textContent = `"${data.name}" Created!`;
   document.getElementById('wall-invite-link').textContent = link;
-  document.getElementById('wall-invite-modal').style.display = 'flex';
+  document.getElementById('wall-invite-modal').classList.add('open');
   currentWallInviteCode = data.invite_code;
 
   // Reload walls tab
@@ -2184,7 +2184,7 @@ async function openWallPage(wallId) {
   // Hide all pages, show wall page
   document.getElementById('profile-page').classList.remove('active');
   document.getElementById('main-page').classList.add('hidden');
-  document.getElementById('wall-page').style.display = 'block';
+  document.getElementById('wall-page').style.display = 'block'; document.getElementById('profile-page').classList.remove('active');
   window.scrollTo(0, 0);
 
   const { data: wall } = await sb.from('private_walls').select('*').eq('id', wallId).single();
