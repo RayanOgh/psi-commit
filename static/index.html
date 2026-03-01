@@ -1422,10 +1422,11 @@
           <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)" id="res-time"></div>
         </div>
         <div id="commitment-card" style="background:var(--black);border:1px solid #333;padding:1.5rem;font-family:var(--mono);font-size:0.78rem;line-height:2;white-space:pre-wrap;word-break:break-all;color:#ccc"></div>
-        <div style="background:rgba(200,240,0,0.06);border:1px solid rgba(200,240,0,0.25);padding:1rem 1.25rem;margin-top:1.25rem;font-family:var(--mono);font-size:0.72rem;color:var(--accent);line-height:1.7">
-          ⚠ SAVE THIS RECEIPT. Your secret key is not stored anywhere. If you lose it, you can never prove this commitment.
+        <div style="background:rgba(255,70,70,0.08);border:1px solid rgba(255,70,70,0.3);padding:1rem 1.25rem;margin-top:1.25rem;font-family:var(--mono);font-size:0.72rem;color:#ff6b6b;line-height:1.7">
+          ⚠ SAVE YOUR MESSAGE SEPARATELY. It is NOT stored in your receipt file and cannot be recovered. Copy it now.
         </div>
         <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="copyMessage()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:#ff6b6b;border-color:#ff6b6b" id="copy-msg-btn">📋 Copy Message</button>
           <button class="btn btn-primary" onclick="downloadPSC()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download Files (.psc + .stamp.txt)</button>
           <button class="btn btn-outline" onclick="exportOTS()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="export-ots-btn">↓ Export .ots File</button>
           <button class="btn btn-outline" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Text</button>
@@ -1440,7 +1441,8 @@
 
     <!-- SECTION 1: Verify commitment (message + receipt) -->
     <div class="app-card" style="margin-bottom:1.5rem">
-      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:1.25rem">Verify Commitment</div>
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.5rem">Verify Commitment</div>
+      <p style="font-size:0.82rem;color:#777;margin-bottom:1.25rem;line-height:1.7">Prove a message matches a commitment using only the receipt. The math runs entirely in your browser — no server, no internet, no trust required.</p>
       <div class="field-group">
         <label class="field-label">Step 1 — Paste your commitment receipt (.psc) or text receipt</label>
         <textarea id="verify-paste" placeholder="Paste your full commitment receipt here..." style="min-height:120px;font-size:0.78rem" oninput="parseReceipt()"></textarea>
@@ -2174,6 +2176,18 @@ function copyCard() {
   });
 }
 
+function copyMessage() {
+  if (!currentCommitment || !currentCommitment.message) return;
+  navigator.clipboard.writeText(currentCommitment.message).then(() => {
+    const btn = document.getElementById('copy-msg-btn');
+    const orig = btn.textContent;
+    btn.textContent = '✓ Message Copied!';
+    btn.style.background = 'var(--accent2)';
+    btn.style.borderColor = 'var(--accent2)';
+    setTimeout(() => { btn.textContent = orig; btn.style.background = '#ff6b6b'; btn.style.borderColor = '#ff6b6b'; }, 2000);
+  });
+}
+
 function buildStampFile(commitment) {
   // This exact text is SHA256'd and submitted to OTS.
   // Also what the user drops on opentimestamps.org / dgi.io/ots to verify.
@@ -2188,7 +2202,8 @@ function buildStampFile(commitment) {
 }
 
 function buildPSCData(commitment) {
-  // Full receipt including secret key and message — for user download only, never sent to server
+  // Receipt with cryptographic material — message is NOT included.
+  // The user must save their message separately.
   return {
     version: '1',
     id: commitment.id,
@@ -2198,10 +2213,9 @@ function buildPSCData(commitment) {
     context: commitment.context,
     timestamp: commitment.timestamp,
     visibility: commitment.visibility,
-    message: commitment.message,
     key: commitment.key,
     created_by: 'psicommit.com',
-    _note: 'Keep this file private. The .stamp.txt + .ots files prove when this commitment was made.'
+    _note: 'This is your cryptographic key. Save your original message separately — it is not stored here and cannot be recovered.'
   };
 }
 
@@ -2364,7 +2378,7 @@ function parseReceipt() {
   const text = document.getElementById('verify-paste').value.trim();
   const fields = document.getElementById('parsed-fields');
 
-  let key = '', mac = '', nonce = '', id = '', context = '', message = '';
+  let key = '', mac = '', nonce = '', id = '', context = '';
 
   // Try JSON format first (.psc file)
   try {
@@ -2374,7 +2388,6 @@ function parseReceipt() {
     nonce = data.nonce || '';
     id = data.id || '';
     context = (data.context || data.domain || '').replace('psi-commit.v1.', '');
-    message = data.message || '';
   } catch(e) {
     // Fall back to text receipt format
     const keyMatch = text.match(/SECRET KEY[^\n]*\n([a-f0-9]{64})/i);
@@ -2396,9 +2409,6 @@ function parseReceipt() {
     document.getElementById('p-nonce').value = nonce;
     document.getElementById('p-id').value = id;
     document.getElementById('p-context').value = context || 'default';
-    if (message) {
-      document.getElementById('verify-message').value = message;
-    }
     fields.style.display = 'block';
   } else {
     fields.style.display = 'none';
@@ -2611,28 +2621,25 @@ async function revealItem(commitmentId) {
   const receipt = prompt(`Paste the contents of your .psc file for ${commitmentId}:\n\n(Open the .psc file in a text editor, select all, copy, and paste here)`);
   if (!receipt) return;
 
-  let key_hex, message;
+  let key_hex;
 
   // Try JSON format first (.psc file)
   try {
     const data = JSON.parse(receipt.trim());
     key_hex = data.key;
-    message = data.message;
   } catch(e) {
     // Fall back to text receipt format
     const keyMatch = receipt.match(/SECRET KEY[^\n]*\n([a-f0-9]{64})/i) || receipt.match(/([a-f0-9]{64})\s*$/im);
     if (keyMatch) key_hex = keyMatch[1];
-
-    // For text format, still need to ask for message
-    if (key_hex) {
-      message = prompt('Enter your original message:');
-    }
   }
 
-  if (!key_hex || !message) {
-    alert('Could not parse receipt. Make sure you pasted the full .psc file contents.');
+  if (!key_hex) {
+    alert('Could not find the secret key in your receipt. Make sure you pasted the full .psc file contents.');
     return;
   }
+
+  const message = prompt('Enter your original message:');
+  if (!message) return;
 
   try {
     const res = await fetch(`${API_BASE}/api/reveal/${commitmentId}`, {
