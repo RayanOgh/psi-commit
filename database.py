@@ -130,5 +130,10 @@ class Database:
         return result.data or []
 
 
+    async def delete_commitment(self, commitment_id: str):
+        """Delete a commitment by ID."""
+        client = get_client()
+        client.table("commitments").delete().eq("id", commitment_id).execute()
+
 # Singleton instance
 db = Database()
