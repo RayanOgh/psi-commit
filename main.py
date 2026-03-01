@@ -152,7 +152,7 @@ async def ots_diagnostics():
     Run diagnostics on the OTS Bitcoin anchoring system.
     Checks: calendar connectivity, pending/confirmed counts, sample verification.
     """
-    from ots import OTS_CALENDARS, submit_to_calendar, upgrade_receipt, build_ots_submit_digest, parse_bitcoin_block, build_detached_ots_file
+    from ots import OTS_CALENDARS, submit_to_calendar, build_ots_submit_digest, parse_bitcoin_block, upgrade_ots_file, find_pending_attestations
     import hashlib
 
     results = {
@@ -205,41 +205,43 @@ async def ots_diagnostics():
 
     for c in (submitted.data or []):
         try:
-            # Report current .ots file info
             stored_ots = bytes.fromhex(c["ots_receipt"]) if c.get("ots_receipt") else None
             ots_info = {}
             if stored_ots:
                 ots_info["stored_size"] = len(stored_ots)
                 ots_info["has_magic"] = stored_ots[:15] == b'\x00OpenTimestamps'
-                # Check if digest is at correct position (bytes 33-65)
                 ots_info["format"] = "correct" if len(stored_ots) >= 65 else "too_short"
 
-            digest = build_ots_submit_digest(c["id"], c["mac"], c.get("committed_at", ""), c.get("ots_digest"))
-            upgraded = await upgrade_receipt(digest)
-            if upgraded:
-                ots_file = build_detached_ots_file(digest, upgraded, "confirmed")
-                block_num = parse_bitcoin_block(ots_file)
-                if block_num:
-                    await db.update_ots(c["id"], ots_file, "confirmed", block_num)
-                    results["sample_checks"].append({
-                        "id": c["id"],
-                        "result": "confirmed",
-                        "bitcoin_block": block_num,
-                        "ots_file": ots_info,
-                    })
-                else:
-                    results["sample_checks"].append({
-                        "id": c["id"],
-                        "result": "upgraded_but_no_block",
-                        "upgraded_bytes": len(upgraded),
-                        "ots_file": ots_info,
-                    })
+                # Show what the pending attestation commitment hash is
+                pending = find_pending_attestations(stored_ots)
+                ots_info["pending_attestations"] = [
+                    {"uri": p["uri"], "commitment_prefix": p["commitment_hex"][:16]}
+                    for p in pending
+                ]
+
+            # Try to upgrade using the CORRECT commitment hash
+            upgraded_bytes, block_num = await upgrade_ots_file(stored_ots)
+            if upgraded_bytes and block_num:
+                await db.update_ots(c["id"], upgraded_bytes, "confirmed", block_num)
+                results["sample_checks"].append({
+                    "id": c["id"],
+                    "result": "confirmed",
+                    "bitcoin_block": block_num,
+                    "ots_file": ots_info,
+                })
+            elif upgraded_bytes:
+                results["sample_checks"].append({
+                    "id": c["id"],
+                    "result": "upgraded_but_no_block",
+                    "ots_file": ots_info,
+                })
             else:
+                digest = build_ots_submit_digest(c["id"], c["mac"], c.get("committed_at", ""), c.get("ots_digest"))
                 results["sample_checks"].append({
                     "id": c["id"],
                     "result": "still_pending",
                     "committed_at": c.get("committed_at"),
-                    "digest_prefix": digest.hex()[:16],
+                    "original_digest_prefix": digest.hex()[:16],
                     "ots_file": ots_info,
                 })
         except Exception as e:
@@ -407,7 +409,6 @@ async def verify_ots(request: Request):
     """
     Verify an OTS file against a stamp digest.
     Client sends: ots_hex (the .ots file bytes as hex), stamp_digest (SHA256 of .stamp.txt)
-    We check if the OTS proof confirms the stamp digest in Bitcoin.
     """
     body = await request.json()
     ots_hex = body.get("ots_hex")
@@ -417,23 +418,17 @@ async def verify_ots(request: Request):
         raise HTTPException(status_code=400, detail="Missing ots_hex or stamp_digest")
 
     try:
-        from ots import upgrade_receipt, parse_bitcoin_block, build_detached_ots_file
+        from ots import parse_bitcoin_block, upgrade_ots_file
 
         ots_bytes = bytes.fromhex(ots_hex)
-        digest = bytes.fromhex(stamp_digest)
 
-        # Try to get confirmed receipt from calendars
-        upgraded = await upgrade_receipt(digest)
-
-        if upgraded:
-            # Wrap in proper .ots file before parsing
-            ots_file = build_detached_ots_file(digest, upgraded, "confirmed")
-            block_num = parse_bitcoin_block(ots_file)
-            if block_num:
-                return {"status": "confirmed", "bitcoin_block": block_num}
-
-        # Check if the uploaded .ots file is already confirmed
+        # Check if already confirmed
         block_num = parse_bitcoin_block(ots_bytes)
+        if block_num:
+            return {"status": "confirmed", "bitcoin_block": block_num}
+
+        # Try to upgrade using proper calendar lookup
+        upgraded_bytes, block_num = await upgrade_ots_file(ots_bytes)
         if block_num:
             return {"status": "confirmed", "bitcoin_block": block_num}
 
