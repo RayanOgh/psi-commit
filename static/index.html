@@ -1176,6 +1176,7 @@
     <li><a href="#app" onclick="showMainPage()">Commit</a></li>
     <li><a href="#app" onclick="showMainPage()">Verify</a></li>
     <li><a href="#app" onclick="showMainPage()">Wall</a></li>
+    <li><a href="#verify-guide">Verify</a></li>
     <li><a href="#security">Security</a></li>
     <li><a href="https://github.com/RayanOgh/psi-commit" target="_blank">GitHub</a></li>
   </ul>
@@ -1517,6 +1518,7 @@
       <h3 class="provides">What this provides</h3>
       <div class="sec-item">Cryptographic binding — you cannot change your message after committing</div>
       <div class="sec-item">Cryptographic hiding — the commitment reveals nothing until you reveal</div>
+      <div class="sec-item">Bitcoin timestamp — every commitment is permanently anchored to the blockchain via OpenTimestamps</div>
       <div class="sec-item">Domain separation — prevents cross-context replay attacks</div>
       <div class="sec-item">Constant-time verification — immune to timing attacks</div>
       <div class="sec-item">Zero-knowledge server — your secret never leaves your browser</div>
@@ -1524,10 +1526,10 @@
     </div>
     <div class="sec-col">
       <h3 class="not-provides">What this does NOT provide</h3>
-      <div class="sec-item no">Anonymity — it doesn't hide who made the commitment</div>
-      <div class="sec-item no">Forward secrecy — key compromise allows forging of that commitment</div>
-      <div class="sec-item no">Byzantine fault tolerance — requires trust in the key holder</div>
-      <div class="sec-item no">Legal enforceability — cryptographic proof ≠ legal proof</div>
+      <div class="sec-item no">Anonymity — your username is attached to public commitments</div>
+      <div class="sec-item no">Forward secrecy — if your key is compromised, that commitment can be forged</div>
+      <div class="sec-item no">Legal enforceability — cryptographic proof is not the same as legal proof</div>
+      <div class="sec-item no">Message recovery — if you lose your secret key, your commitment cannot be revealed</div>
     </div>
   </div>
   <div style="margin-top:3rem;padding:2rem;border:1px solid var(--border);max-width:680px">
@@ -1537,16 +1539,53 @@
   </div>
 </section>
 
+<!-- VERIFICATION GUIDE -->
+<section id="verify-guide" style="padding:7rem 2.5rem;border-top:1px solid var(--border)">
+  <div class="section-label">Independent Verification</div>
+  <h2 class="section-title">VERIFY WITHOUT<br>TRUSTING US.</h2>
+  <p style="max-width:680px;color:#999;font-size:0.95rem;line-height:1.8;margin:2rem 0 3rem">Your .ots file is a cryptographic proof anchored in Bitcoin. You can verify it independently on opentimestamps.org or using the open-source OTS client — no account needed, no trust in us required.</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;max-width:900px">
+    <div style="border:1px solid var(--border);padding:2rem">
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;margin-bottom:1rem">METHOD 01 / WEBSITE</div>
+      <div style="font-family:var(--display);font-size:1.6rem;margin-bottom:1rem">OPENTIMESTAMPS<br>.ORG</div>
+      <ol style="font-size:0.85rem;color:#999;line-height:2.2;padding-left:1.2rem">
+        <li>Go to your profile and click <strong style="color:var(--white)">↓ .ots</strong> on any commitment</li>
+        <li>Name and save the file to your computer</li>
+        <li>Visit <a href="https://opentimestamps.org" target="_blank" style="color:var(--accent)">opentimestamps.org</a></li>
+        <li>Drag and drop your <strong style="color:var(--white)">.ots file</strong> onto the page</li>
+        <li>It will show the Bitcoin block number and timestamp — independent of us</li>
+      </ol>
+    </div>
+    <div style="border:1px solid var(--border);padding:2rem">
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;margin-bottom:1rem">METHOD 02 / COMMAND LINE</div>
+      <div style="font-family:var(--display);font-size:1.6rem;margin-bottom:1rem">OTS CLIENT<br>(ADVANCED)</div>
+      <div style="font-size:0.85rem;color:#999;line-height:1.8;margin-bottom:1rem">For developers who want full local verification:</div>
+      <div style="background:#111;padding:1rem;font-family:var(--mono);font-size:0.72rem;color:var(--accent2);line-height:2">
+        pip install opentimestamps-client<br>
+        ots verify yourfile.ots
+      </div>
+      <p style="font-size:0.78rem;color:#666;margin-top:1rem;line-height:1.6">The OTS client connects directly to Bitcoin nodes to verify the proof — completely independent of psicommit.com.</p>
+    </div>
+  </div>
+
+  <div style="margin-top:2rem;padding:1.5rem 2rem;border:1px solid var(--border);max-width:900px;display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+    <div style="font-family:var(--mono);font-size:0.72rem;color:var(--muted)">⚡ Note: Bitcoin confirmation takes 1-2 hours after your commitment is made. Until confirmed, the .ots file is a pending receipt. Once confirmed, it is permanently anchored in the Bitcoin blockchain — forever.</div>
+  </div>
+</section>
+
 <!-- FOOTER -->
 <footer>
   <div class="footer-logo">PSI — COMMIT</div>
   <ul class="footer-links">
-    <li><a href="#app">Commit</a></li>
-    <li><a href="#app">Verify</a></li>
-    <li><a href="https://github.com/RayanOgh/psi-commit" target="_blank">GitHub</a></li>
+    <li><a href="#app" onclick="showMainPage()">Commit</a></li>
+    <li><a href="#app" onclick="showMainPage()">Verify</a></li>
+    <li><a href="#verify-guide">How to Verify</a></li>
+    <li><a href="#verify-guide">Verify</a></li>
     <li><a href="#security">Security</a></li>
+    <li><a href="https://github.com/RayanOgh/psi-commit" target="_blank">GitHub</a></li>
   </ul>
-  <div class="footer-copy">MIT License · HMAC-SHA256 · Zero Dependencies</div>
+  <div class="footer-copy">MIT License · HMAC-SHA256 · Bitcoin-anchored via OpenTimestamps</div>
 </footer>
 
 </div><!-- end main-page -->
