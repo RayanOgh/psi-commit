@@ -209,6 +209,24 @@ async def reveal_commitment(commitment_id: str, data: RevealPost):
 
 
 
+@app.get("/api/ots/{commitment_id}/download")
+async def download_ots(commitment_id: str):
+    """Download the raw .ots binary file for a commitment."""
+    commitment = await db.get_commitment(commitment_id)
+    if not commitment:
+        raise HTTPException(status_code=404, detail="Commitment not found")
+    ots_hex = commitment.get("ots_receipt")
+    if not ots_hex:
+        raise HTTPException(status_code=404, detail="OTS receipt not yet available. Bitcoin anchoring in progress.")
+    ots_bytes = bytes.fromhex(ots_hex)
+    from fastapi.responses import Response
+    return Response(
+        content=ots_bytes,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename={commitment_id}.ots"}
+    )
+
+
 @app.delete("/api/commitment/{commitment_id}")
 async def delete_commitment(commitment_id: str, request: Request):
     user_id = request.headers.get('x-user-id')
