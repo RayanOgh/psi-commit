@@ -1,4 +1,4 @@
-""" 
+"""
 OpenTimestamps Bitcoin anchoring.
 Properly constructs .ots detached timestamp files.
 """
@@ -31,9 +31,32 @@ def sha256(data: bytes) -> bytes:
     return hashlib.sha256(data).digest()
 
 
-def build_ots_submit_digest(mac_hex: str) -> bytes:
-    """SHA256 the MAC bytes — this is the digest we submit to OTS calendars."""
-    return sha256(bytes.fromhex(mac_hex))
+def build_stamp_file(commitment_id: str, mac_hex: str, timestamp: str) -> str:
+    """
+    Build the stamp file text — identical to what the browser generates.
+    This is what gets SHA256'd and submitted to OTS.
+    Users drop this file on opentimestamps.org / dgi.io/ots alongside the .ots file to verify.
+    Message and key are NOT included — stays private.
+    """
+    return "\n".join([
+        "PSI-COMMIT STAMP",
+        f"id: {commitment_id}",
+        f"mac: {mac_hex}",
+        f"timestamp: {timestamp}",
+        "site: psicommit.com",
+    ])
+
+
+def build_ots_submit_digest(commitment_id: str, mac_hex: str, timestamp: str, psc_digest: str = None) -> bytes:
+    """
+    Get the 32-byte digest to submit to OTS.
+    If psc_digest (stamp SHA256) is provided by browser, use it directly.
+    Otherwise build the stamp file server-side and SHA256 it.
+    """
+    if psc_digest:
+        return bytes.fromhex(psc_digest)
+    stamp = build_stamp_file(commitment_id, mac_hex, timestamp)
+    return sha256(stamp.encode('utf-8'))
 
 
 def build_detached_ots_file(digest: bytes, calendar_receipt_body: bytes, calendar_url: str) -> bytes:
@@ -80,11 +103,11 @@ def _encode_varint(n: int) -> bytes:
     return result
 
 
-async def anchor_commitment(commitment_id: str, mac_hex: str):
-    """Submit commitment to OTS calendar and store proper .ots file."""
+async def anchor_commitment(commitment_id: str, mac_hex: str, timestamp: str = '', psc_digest: str = None):
+    """Submit commitment stamp file digest to OTS calendar."""
     try:
-        digest = build_ots_submit_digest(mac_hex)
-        print(f"[OTS] Submitting digest: {digest.hex()[:16]}... for {commitment_id}")
+        digest = build_ots_submit_digest(commitment_id, mac_hex, timestamp, psc_digest)
+        print(f"[OTS] Submitting stamp digest: {digest.hex()[:16]}... for {commitment_id}")
 
         receipt_body = None
         used_calendar = None
@@ -135,10 +158,10 @@ async def submit_to_calendar(calendar_url: str, digest: bytes) -> Optional[bytes
         return None
 
 
-async def check_ots_status(commitment_id: str, mac_hex: str, ots_receipt_hex: str) -> dict:
+async def check_ots_status(commitment_id: str, mac_hex: str, ots_receipt_hex: str, ots_digest: str = None, timestamp: str = '') -> dict:
     """Check if OTS receipt has been confirmed in a Bitcoin block."""
     try:
-        digest = build_ots_submit_digest(mac_hex)
+        digest = build_ots_submit_digest(commitment_id, mac_hex, timestamp, ots_digest)
         upgraded = await upgrade_receipt(digest)
 
         if upgraded:
