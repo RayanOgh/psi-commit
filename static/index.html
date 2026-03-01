@@ -2361,20 +2361,34 @@ async function exportCommitmentOTS(commitmentId) {
 
 // ── PARSE RECEIPT ──
 function parseReceipt() {
-  const text = document.getElementById('verify-paste').value;
+  const text = document.getElementById('verify-paste').value.trim();
   const fields = document.getElementById('parsed-fields');
 
-  const keyMatch = text.match(/SECRET KEY[^\n]*\n([a-f0-9]{64})/i);
-  const macMatch = text.match(/MAC\s+([a-f0-9]{64})/i);
-  const nonceMatch = text.match(/NONCE\s+([a-f0-9]{64})/i);
-  const idMatch = text.match(/ID\s+(psc_[a-f0-9]+)/i);
-  const contextMatch = text.match(/CONTEXT\s+(psi-commit\.[^\s]+)/i);
+  let key = '', mac = '', nonce = '', id = '', context = '', message = '';
 
-  const key = keyMatch ? keyMatch[1] : '';
-  const mac = macMatch ? macMatch[1] : '';
-  const nonce = nonceMatch ? nonceMatch[1] : '';
-  const id = idMatch ? idMatch[1] : '';
-  const context = contextMatch ? contextMatch[1].replace('psi-commit.v1.', '') : '';
+  // Try JSON format first (.psc file)
+  try {
+    const data = JSON.parse(text);
+    key = data.key || '';
+    mac = data.mac || '';
+    nonce = data.nonce || '';
+    id = data.id || '';
+    context = (data.context || data.domain || '').replace('psi-commit.v1.', '');
+    message = data.message || '';
+  } catch(e) {
+    // Fall back to text receipt format
+    const keyMatch = text.match(/SECRET KEY[^\n]*\n([a-f0-9]{64})/i);
+    const macMatch = text.match(/MAC\s+([a-f0-9]{64})/i);
+    const nonceMatch = text.match(/NONCE\s+([a-f0-9]{64})/i);
+    const idMatch = text.match(/ID\s+(psc_[a-f0-9]+)/i);
+    const contextMatch = text.match(/CONTEXT\s+(psi-commit\.[^\s]+)/i);
+
+    key = keyMatch ? keyMatch[1] : '';
+    mac = macMatch ? macMatch[1] : '';
+    nonce = nonceMatch ? nonceMatch[1] : '';
+    id = idMatch ? idMatch[1] : '';
+    context = contextMatch ? contextMatch[1].replace('psi-commit.v1.', '') : '';
+  }
 
   if (key || mac || nonce) {
     document.getElementById('p-key').value = key;
@@ -2382,6 +2396,9 @@ function parseReceipt() {
     document.getElementById('p-nonce').value = nonce;
     document.getElementById('p-id').value = id;
     document.getElementById('p-context').value = context || 'default';
+    if (message) {
+      document.getElementById('verify-message').value = message;
+    }
     fields.style.display = 'block';
   } else {
     fields.style.display = 'none';
@@ -2591,16 +2608,29 @@ async function renderWall() {
 }
 
 async function revealItem(commitmentId) {
-  const receipt = prompt(`Paste your full commitment receipt for ${commitmentId}:`);
+  const receipt = prompt(`Paste the contents of your .psc file for ${commitmentId}:\n\n(Open the .psc file in a text editor, select all, copy, and paste here)`);
   if (!receipt) return;
-  const message = prompt('Enter your original message:');
-  if (!message) return;
 
-  const keyMatch = receipt.match(/([a-f0-9]{64})\s*$/im);
-  const nonceMatch = receipt.match(/NONCE\s+([a-f0-9]{64})/i);
+  let key_hex, message;
 
-  if (!keyMatch || !nonceMatch) {
-    alert('Could not parse receipt.');
+  // Try JSON format first (.psc file)
+  try {
+    const data = JSON.parse(receipt.trim());
+    key_hex = data.key;
+    message = data.message;
+  } catch(e) {
+    // Fall back to text receipt format
+    const keyMatch = receipt.match(/SECRET KEY[^\n]*\n([a-f0-9]{64})/i) || receipt.match(/([a-f0-9]{64})\s*$/im);
+    if (keyMatch) key_hex = keyMatch[1];
+
+    // For text format, still need to ask for message
+    if (key_hex) {
+      message = prompt('Enter your original message:');
+    }
+  }
+
+  if (!key_hex || !message) {
+    alert('Could not parse receipt. Make sure you pasted the full .psc file contents.');
     return;
   }
 
@@ -2608,7 +2638,7 @@ async function revealItem(commitmentId) {
     const res = await fetch(`${API_BASE}/api/reveal/${commitmentId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: commitmentId, message, key_hex: keyMatch[1] })
+      body: JSON.stringify({ id: commitmentId, message, key_hex })
     });
     if (res.ok) {
       renderWall();
