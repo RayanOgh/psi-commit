@@ -1,4 +1,4 @@
-"""
+""" 
 OpenTimestamps Bitcoin anchoring.
 Properly constructs .ots detached timestamp files.
 """
