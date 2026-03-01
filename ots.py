@@ -165,10 +165,10 @@ async def check_ots_status(commitment_id: str, mac_hex: str, ots_receipt_hex: st
         upgraded = await upgrade_receipt(digest)
 
         if upgraded:
-            block_num = parse_bitcoin_block(upgraded)
+            # Build a full .ots file first, THEN parse for block number
+            ots_file = build_detached_ots_file(digest, upgraded, "confirmed")
+            block_num = parse_bitcoin_block(ots_file)
             if block_num:
-                # Rebuild full .ots file with confirmed receipt
-                ots_file = build_detached_ots_file(digest, upgraded, "confirmed")
                 await db.update_ots(
                     commitment_id=commitment_id,
                     ots_receipt=ots_file,
