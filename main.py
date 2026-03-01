@@ -273,6 +273,81 @@ async def ots_diagnostics():
     return results
 
 
+@app.get("/api/ots/debug/{commitment_id}")
+async def ots_debug(commitment_id: str):
+    """Deep inspection of a .ots file for debugging."""
+    commitment = await db.get_commitment(commitment_id)
+    if not commitment:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    ots_hex = commitment.get("ots_receipt")
+    if not ots_hex:
+        return {"error": "no ots_receipt stored"}
+
+    ots_bytes = bytes.fromhex(ots_hex)
+    result = {
+        "total_bytes": len(ots_bytes),
+        "magic_ok": ots_bytes[:31] == b'\x00OpenTimestamps\x00\x00Proof\x00\xbf\x89\xe2\xe8\x84\xe8\x92\x94',
+        "version": ots_bytes[31] if len(ots_bytes) > 31 else None,
+        "hash_op": hex(ots_bytes[32]) if len(ots_bytes) > 32 else None,
+        "digest_hex": ots_bytes[33:65].hex() if len(ots_bytes) >= 65 else None,
+        "body_starts_hex": ots_bytes[65:85].hex() if len(ots_bytes) > 65 else None,
+        "first_body_byte": hex(ots_bytes[65]) if len(ots_bytes) > 65 else None,
+        "ots_digest_in_db": commitment.get("ots_digest"),
+    }
+
+    # Try library parse
+    try:
+        from opentimestamps.core.timestamp import DetachedTimestampFile
+        from opentimestamps.core.notary import PendingAttestation, BitcoinBlockHeaderAttestation
+        import io
+
+        ctx = io.BytesIO(ots_bytes)
+        detached = DetachedTimestampFile.deserialize(ctx)
+        result["library_parse"] = "success"
+        result["initial_msg"] = detached.timestamp.msg.hex()
+
+        # Walk the tree
+        ops_info = []
+        def walk(ts, depth=0):
+            atts = []
+            for att in ts.attestations:
+                if isinstance(att, PendingAttestation):
+                    atts.append({"type": "PendingAttestation", "uri": att.uri})
+                elif isinstance(att, BitcoinBlockHeaderAttestation):
+                    atts.append({"type": "BitcoinBlock", "height": att.height})
+                else:
+                    atts.append({"type": type(att).__name__})
+
+            for op, child in ts.ops.items():
+                op_name = type(op).__name__
+                ops_info.append({
+                    "depth": depth,
+                    "op": op_name,
+                    "child_msg": child.msg.hex()[:16],
+                    "attestations": atts if atts else None,
+                })
+                walk(child, depth + 1)
+
+            if not ts.ops and atts:
+                ops_info.append({
+                    "depth": depth,
+                    "op": "LEAF",
+                    "msg": ts.msg.hex()[:16],
+                    "attestations": atts,
+                })
+
+        walk(detached.timestamp)
+        result["tree"] = ops_info
+
+    except Exception as e:
+        result["library_parse"] = f"failed: {e}"
+        import traceback
+        result["traceback"] = traceback.format_exc()
+
+    return result
+
+
 @app.post("/api/ots/repair")
 async def ots_repair():
     """
