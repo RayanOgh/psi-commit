@@ -19,27 +19,39 @@ OTS_CALENDARS = [
 ]
 
 
-def hash_mac(mac_hex: str) -> bytes:
-    """Hash the MAC to get a 32-byte digest for OTS submission."""
-    return bytes.fromhex(mac_hex)
+def sha256(data: bytes) -> bytes:
+    return hashlib.sha256(data).digest()
+
+
+def build_ots_submit_digest(mac_hex: str) -> bytes:
+    """
+    SHA256 the MAC bytes to get a proper 32-byte digest for OTS submission.
+    The OTS calendar expects a raw 32-byte SHA256 digest.
+    """
+    mac_bytes = bytes.fromhex(mac_hex)
+    return sha256(mac_bytes)
 
 
 async def anchor_commitment(commitment_id: str, mac_hex: str):
     """
     Submit a commitment MAC to OTS calendar servers.
     Runs in background — does not block the API response.
-    Saves receipt to database when done.
     """
     try:
-        digest = hash_mac(mac_hex)
+        digest = build_ots_submit_digest(mac_hex)
+        print(f"[OTS] Submitting digest: {digest.hex()[:16]}... for {commitment_id}")
 
         receipt_data = None
+        used_calendar = None
+
         for calendar_url in OTS_CALENDARS:
             try:
                 receipt_data = await submit_to_calendar(calendar_url, digest)
                 if receipt_data:
+                    used_calendar = calendar_url
                     break
-            except Exception:
+            except Exception as e:
+                print(f"[OTS] Calendar {calendar_url} failed: {e}")
                 continue
 
         if receipt_data:
@@ -48,7 +60,7 @@ async def anchor_commitment(commitment_id: str, mac_hex: str):
                 ots_receipt=receipt_data,
                 ots_status="submitted"
             )
-            print(f"[OTS] Commitment {commitment_id} submitted to Bitcoin calendar.")
+            print(f"[OTS] {commitment_id} submitted via {used_calendar} ({len(receipt_data)} bytes, starts: {receipt_data[:4].hex()})")
         else:
             print(f"[OTS] Failed to submit {commitment_id} to any calendar server.")
 
@@ -68,8 +80,12 @@ async def submit_to_calendar(calendar_url: str, digest: bytes) -> Optional[bytes
             content=digest,
             headers={"Content-Type": "application/octet-stream"}
         )
-        if response.status_code == 200:
+
+        print(f"[OTS] {calendar_url} responded {response.status_code}, {len(response.content)} bytes, starts: {response.content[:4].hex() if response.content else 'empty'}")
+
+        if response.status_code == 200 and len(response.content) > 10:
             return response.content
+
         return None
 
 
@@ -80,13 +96,10 @@ async def check_ots_status(
 ) -> dict:
     """
     Check if an OTS receipt has been confirmed in a Bitcoin block.
-    Updates the database if confirmed.
     """
     try:
         receipt_bytes = bytes.fromhex(ots_receipt_hex)
-
-        # Use the original MAC as the digest — this is what we submitted to the calendar
-        digest = bytes.fromhex(mac_hex)
+        digest = build_ots_submit_digest(mac_hex)
 
         upgraded = await upgrade_receipt(receipt_bytes, digest=digest)
 
@@ -102,7 +115,7 @@ async def check_ots_status(
                 return {
                     "status": "confirmed",
                     "bitcoin_block": block_num,
-                    "message": f"Anchored in Bitcoin block #{block_num}. Verify at opentimestamps.org"
+                    "message": f"Anchored in Bitcoin block #{block_num}."
                 }
 
         return {
@@ -111,6 +124,7 @@ async def check_ots_status(
         }
 
     except Exception as e:
+        print(f"[OTS] check_ots_status error: {e}")
         return {
             "status": "error",
             "message": f"Could not check OTS status: {str(e)}"
@@ -119,20 +133,12 @@ async def check_ots_status(
 
 async def upgrade_receipt(receipt_bytes: bytes, digest: bytes = None) -> Optional[bytes]:
     """
-    Try to upgrade a pending OTS receipt by fetching confirmation from calendar servers.
-
-    The digest is the original 32-byte hash we submitted to the calendar.
-    We query the calendar with this digest to get the upgraded receipt
-    containing the Bitcoin block proof if confirmed.
+    Try to upgrade a pending OTS receipt by querying the calendar's /timestamp/ endpoint.
     """
-    if digest:
-        commitment_hex = digest.hex()
-    else:
-        # Fall back to extracting from receipt — skip 2-byte magic header
-        if len(receipt_bytes) < 34:
-            return None
-        commitment_hex = receipt_bytes[2:34].hex()
+    if digest is None:
+        return None
 
+    commitment_hex = digest.hex()
     print(f"[OTS] Checking calendar for digest: {commitment_hex[:16]}...")
 
     for calendar_url in OTS_CALENDARS:
@@ -152,14 +158,13 @@ async def upgrade_receipt(receipt_bytes: bytes, digest: bytes = None) -> Optiona
         except Exception as e:
             print(f"[OTS] Error contacting {calendar_url}: {e}")
             continue
+
     return None
 
 
 def parse_bitcoin_block(receipt_bytes: bytes) -> Optional[int]:
     """
     Extract Bitcoin block number from a confirmed OTS receipt.
-    Uses the opentimestamps library for proper parsing.
-    Falls back to heuristic scanning if library unavailable.
     """
     try:
         from opentimestamps.core.timestamp import DetachedTimestampFile
@@ -181,16 +186,18 @@ def parse_bitcoin_block(receipt_bytes: bytes) -> Optional[int]:
 
         block = find_bitcoin_block(detached.timestamp)
         if block:
+            print(f"[OTS] Parsed Bitcoin block #{block}")
             return block
 
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[OTS] opentimestamps library parse failed: {e}")
 
     # Fallback: scan for 4-byte big-endian integers in Bitcoin block range
     try:
         for i in range(len(receipt_bytes) - 4):
             val = int.from_bytes(receipt_bytes[i:i+4], 'big')
-            if 800_000 <= val <= 1_500_000:
+            if 880_000 <= val <= 1_500_000:
+                print(f"[OTS] Heuristic found block #{val}")
                 return val
     except Exception:
         pass
@@ -199,8 +206,4 @@ def parse_bitcoin_block(receipt_bytes: bytes) -> Optional[int]:
 
 
 def get_ots_verify_url(commitment_id: str) -> str:
-    """
-    Return the URL where users can independently verify their commitment
-    on opentimestamps.org.
-    """
-    return f"https://opentimestamps.org"
+    return "https://opentimestamps.org"
