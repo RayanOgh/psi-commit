@@ -251,6 +251,62 @@ async def ots_diagnostics():
     return results
 
 
+@app.post("/api/ots/repair")
+async def ots_repair():
+    """
+    Repair OTS issues:
+    1. Resubmit commitments stuck at 'pending' (never submitted to calendar)
+    2. Fix malformed .ots files on 'submitted' commitments (had digest embedded incorrectly)
+    """
+    client = get_client()
+    results = {"resubmitted": [], "fixed_ots": [], "errors": []}
+
+    # 1. Resubmit stuck 'pending' commitments
+    stuck = client.table("commitments").select(
+        "id, mac, committed_at, ots_digest"
+    ).eq("ots_status", "pending").execute()
+
+    for c in (stuck.data or []):
+        try:
+            asyncio.create_task(anchor_commitment(
+                c["id"], c["mac"],
+                timestamp=c.get("committed_at", ""),
+                psc_digest=c.get("ots_digest")
+            ))
+            results["resubmitted"].append(c["id"])
+        except Exception as e:
+            results["errors"].append({"id": c["id"], "step": "resubmit", "error": str(e)})
+
+    # 2. Fix malformed .ots files (old format had digest embedded at bytes 33-65)
+    submitted = client.table("commitments").select(
+        "id, ots_receipt"
+    ).eq("ots_status", "submitted").not_.is_("ots_receipt", "null").execute()
+
+    OTS_HEADER_LEN = 33  # magic(31) + version(1) + hash_op(1)
+
+    for c in (submitted.data or []):
+        try:
+            ots_bytes = bytes.fromhex(c["ots_receipt"])
+            # Check if file has the old malformed format (digest embedded after header)
+            # Old format: header(33) + varint(1) + digest(32) + calendar_body
+            # New format: header(33) + calendar_body
+            if len(ots_bytes) > OTS_HEADER_LEN + 33:
+                # Check if byte 33 is 0x20 (varint for 32) — sign of old format
+                if ots_bytes[OTS_HEADER_LEN] == 0x20:
+                    # Strip the varint(1 byte) + digest(32 bytes)
+                    fixed = ots_bytes[:OTS_HEADER_LEN] + ots_bytes[OTS_HEADER_LEN + 33:]
+                    client.table("commitments").update({
+                        "ots_receipt": fixed.hex()
+                    }).eq("id", c["id"]).execute()
+                    results["fixed_ots"].append(c["id"])
+                else:
+                    results["fixed_ots"].append({"id": c["id"], "status": "already_correct"})
+        except Exception as e:
+            results["errors"].append({"id": c["id"], "step": "fix_ots", "error": str(e)})
+
+    return results
+
+
 @app.get("/api/ots/{commitment_id}")
 async def get_ots_status(commitment_id: str):
     commitment = await db.get_commitment(commitment_id)
@@ -268,7 +324,9 @@ async def get_ots_status(commitment_id: str):
         status = await check_ots_status(
             commitment_id,
             commitment["mac"],
-            commitment["ots_receipt"]
+            commitment["ots_receipt"],
+            ots_digest=commitment.get("ots_digest"),
+            timestamp=commitment.get("committed_at", "")
         )
         return status
 
