@@ -1387,7 +1387,7 @@
           ⚠ SAVE THIS RECEIPT. Your secret key is not stored anywhere. If you lose it, you can never prove this commitment.
         </div>
         <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="downloadPSC()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download Receipt (.psc)</button>
+          <button class="btn btn-primary" onclick="downloadPSC()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download Files (.psc + .stamp.txt)</button>
           <button class="btn btn-outline" onclick="exportOTS()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="export-ots-btn">↓ Export .ots File</button>
           <button class="btn btn-outline" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Text</button>
           <button class="btn btn-outline" onclick="addToWall()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="add-wall-btn">+ Add to Wall</button>
@@ -2041,6 +2041,9 @@ async function createCommitment() {
   // Update wall btn visibility
   document.getElementById('add-wall-btn').style.display = commitVisibility === 'public' ? 'inline-flex' : 'none';
 
+  // Build stamp digest for OTS
+  const stampDigest = await buildStampDigest(currentCommitment);
+
   // Auto-save to Supabase if logged in
   if (currentUser) {
     try {
@@ -2050,7 +2053,8 @@ async function createCommitment() {
         body: JSON.stringify({
           id, mac, nonce, context, domain, timestamp,
           user_id: currentUser.id,
-          visibility: commitVisibility
+          visibility: commitVisibility,
+          psc_digest: stampDigest
         })
       });
     } catch(e) {
@@ -2086,39 +2090,65 @@ function copyCard() {
   });
 }
 
+function buildStampFile(commitment) {
+  // This exact text is SHA256'd and submitted to OTS.
+  // Also what the user drops on opentimestamps.org / dgi.io/ots to verify.
+  // Message and key are NOT included — stays private.
+  return [
+    'PSI-COMMIT STAMP',
+    `id: ${commitment.id}`,
+    `mac: ${commitment.mac}`,
+    `timestamp: ${commitment.timestamp}`,
+    `site: psicommit.com`,
+  ].join('\n');
+}
+
 function buildPSCData(commitment) {
+  // Full receipt including secret key and message — for user download only, never sent to server
   return {
     version: '1',
     id: commitment.id,
-    message: commitment.message,
     mac: commitment.mac,
-    key: commitment.key,
     nonce: commitment.nonce,
     domain: commitment.domain,
     context: commitment.context,
     timestamp: commitment.timestamp,
     visibility: commitment.visibility,
-    ots: commitment.otsHex || null,
-    created_by: 'psicommit.com'
+    message: commitment.message,
+    key: commitment.key,
+    created_by: 'psicommit.com',
+    _note: 'Keep this file private. The .stamp.txt + .ots files prove when this commitment was made.'
   };
 }
 
-function promptAndDownloadPSC() {
-  if (!currentCommitment) return;
-  const defaultName = `psc_${currentCommitment.id.replace('psc_', '')}_${new Date().toISOString().slice(0,10)}`;
-  const name = prompt('Name your receipt file:', defaultName);
-  if (name === null) return; // cancelled
-  const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
-  downloadPSCFile(filename);
+async function sha256Hex(str) {
+  const bytes = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function downloadPSC() {
+async function buildStampDigest(commitment) {
+  // SHA256 of the stamp file text — this is what gets submitted to OTS
+  return await sha256Hex(buildStampFile(commitment));
+}
+
+function promptAndDownloadFiles() {
   if (!currentCommitment) return;
-  const defaultName = `psc_${currentCommitment.id.replace('psc_', '')}_${new Date().toISOString().slice(0,10)}`;
-  const name = prompt('Name your receipt file:', defaultName);
+  const defaultName = currentCommitment.id.replace('psc_', '');
+  const name = prompt('Name your files (both .psc and .stamp.txt will use this name):', defaultName);
   if (name === null) return;
   const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
   downloadPSCFile(filename);
+  downloadStampFile(filename);
+}
+
+function promptAndDownloadPSC() {
+  // Called automatically after commit — downloads both files
+  promptAndDownloadFiles();
+}
+
+function downloadPSC() {
+  promptAndDownloadFiles();
 }
 
 function downloadPSCFile(filename) {
@@ -2129,6 +2159,19 @@ function downloadPSCFile(filename) {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename + '.psc';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadStampFile(filename, commitment = null) {
+  const c = commitment || currentCommitment;
+  if (!c) return;
+  const text = buildStampFile(c);
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename + '.stamp.txt';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -2195,6 +2238,23 @@ async function downloadCommitmentPSC(commitmentId) {
   const a = document.createElement('a');
   a.href = url;
   a.download = c.id + '.psc';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadCommitmentStamp(commitmentId, mac, timestamp) {
+  const stampText = [
+    'PSI-COMMIT STAMP',
+    `id: ${commitmentId}`,
+    `mac: ${mac}`,
+    `timestamp: ${timestamp}`,
+    `site: psicommit.com`,
+  ].join('\n');
+  const blob = new Blob([stampText], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = commitmentId + '.stamp.txt';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -2362,6 +2422,7 @@ function buildWallItem(item, isOwner = false) {
         ${!revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem" onclick="revealItem('${item.id}')">Reveal</button>` : ''}
         ${revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2);border-color:var(--accent2)" onclick="openComments('${item.id}')">💬 Comments</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="downloadCommitmentPSC('${item.id}')">↓ .psc</button>` : ''}
+        ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="downloadCommitmentStamp('${item.id}', '${item.mac}', '${item.committed_at || item.timestamp}')">↓ .stamp.txt</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="exportCommitmentOTS('${item.id}')">↓ .ots</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:#ff6060;border-color:#ff6060" onclick="deleteCommitment('${item.id}')">Delete</button>` : ''}
       </div>
