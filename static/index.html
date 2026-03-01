@@ -2476,7 +2476,14 @@ async function handleWallInviteLink() {
   let wall = null;
   try {
     const resp = await fetch(`${API_BASE}/api/wall/invite/${inviteCode}`);
-    if (resp.ok) wall = await resp.json();
+    console.log('[Wall] Invite API response:', resp.status);
+    if (resp.ok) {
+      wall = await resp.json();
+      console.log('[Wall] Resolved wall:', wall);
+    } else {
+      const errBody = await resp.text();
+      console.warn('[Wall] Invite API error:', resp.status, errBody);
+    }
   } catch (e) {
     console.warn('[Wall] Failed to resolve invite:', e);
   }
