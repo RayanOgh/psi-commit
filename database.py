@@ -111,12 +111,19 @@ class Database:
             "revealed_at": "now()"
         }).eq("id", commitment_id).execute()
 
+    async def update_ots_digest(self, commitment_id: str, digest_hex: str):
+        """Store the OTS digest (SHA256 of MAC) for later confirmation checks."""
+        client = get_client()
+        client.table("commitments").update({
+            "ots_digest": digest_hex
+        }).eq("id", commitment_id).execute()
+
     async def get_pending_ots(self) -> List[dict]:
         """Fetch all commitments submitted but not yet confirmed in Bitcoin."""
         client = get_client()
         result = (
             client.table("commitments")
-            .select("id, mac, ots_receipt, ots_status")
+            .select("id, mac, ots_receipt, ots_status, ots_digest")
             .eq("ots_status", "submitted")
             .execute()
         )
