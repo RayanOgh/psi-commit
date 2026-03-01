@@ -19,6 +19,12 @@ from database import db, get_client
 from ots import anchor_commitment, check_ots_status
 
 
+def require_admin():
+    """Check ADMIN_MODE env var. Set ADMIN_MODE=on in Railway to enable admin endpoints."""
+    if os.environ.get("ADMIN_MODE", "off").lower() != "on":
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 # ── BACKGROUND OTS POLLER ──
 async def poll_ots_confirmations():
     while True:
@@ -152,6 +158,7 @@ async def ots_diagnostics():
     Run diagnostics on the OTS Bitcoin anchoring system.
     Checks: calendar connectivity, pending/confirmed counts, sample verification.
     """
+    require_admin()
     from ots import OTS_CALENDARS, submit_to_calendar, build_ots_submit_digest, parse_bitcoin_block, upgrade_ots_file, find_pending_attestations
     import hashlib
 
@@ -276,6 +283,7 @@ async def ots_diagnostics():
 @app.get("/api/ots/debug/{commitment_id}")
 async def ots_debug(commitment_id: str):
     """Deep inspection of a .ots file for debugging."""
+    require_admin()
     commitment = await db.get_commitment(commitment_id)
     if not commitment:
         raise HTTPException(status_code=404, detail="Not found")
@@ -356,6 +364,7 @@ async def ots_repair():
     1. Resubmit commitments stuck at 'pending' (never submitted)
     2. Resubmit commitments with malformed .ots files
     """
+    require_admin()
     from ots import build_ots_submit_digest
     client = get_client()
     results = {"resubmitted": [], "already_ok": [], "errors": []}
