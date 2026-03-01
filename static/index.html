@@ -1555,7 +1555,15 @@
 // ── SUPABASE ──
 const SUPABASE_URL = 'https://tdqlqemmlfcldhmtxziv.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkcWxxZW1tbGZjbGRobXR4eml2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyMzg0ODgsImV4cCI6MjA4NzgxNDQ4OH0.zDdr4uOIelx2CbNyMWmRaSN9TuNMA_eCBr2E98ElmWo';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: true,
+    storageKey: 'psicommit-auth',
+    storage: window.localStorage,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  }
+});
 
 const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8000' : '';
 
