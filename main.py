@@ -146,6 +146,111 @@ async def get_user_commitments(user_id: str, visibility: Optional[str] = None):
     return {"commitments": commitments}
 
 
+@app.get("/api/ots/diagnostics")
+async def ots_diagnostics():
+    """
+    Run diagnostics on the OTS Bitcoin anchoring system.
+    Checks: calendar connectivity, pending/confirmed counts, sample verification.
+    """
+    from ots import OTS_CALENDARS, submit_to_calendar, upgrade_receipt, build_ots_submit_digest, parse_bitcoin_block, build_detached_ots_file
+    import hashlib
+
+    results = {
+        "calendars": [],
+        "commitments": {"total": 0, "pending": 0, "submitted": 0, "confirmed": 0, "no_receipt": 0},
+        "sample_checks": [],
+    }
+
+    # 1. Check calendar connectivity
+    test_digest = hashlib.sha256(b"psi-commit-diagnostic-test").digest()
+    for cal_url in OTS_CALENDARS:
+        try:
+            body = await submit_to_calendar(cal_url, test_digest)
+            results["calendars"].append({
+                "url": cal_url,
+                "status": "ok" if body else "no_response",
+                "response_bytes": len(body) if body else 0,
+            })
+        except Exception as e:
+            results["calendars"].append({
+                "url": cal_url,
+                "status": "error",
+                "error": str(e),
+            })
+
+    # 2. Count commitments by OTS status
+    client = get_client()
+
+    for status_val in ["pending", "submitted", "confirmed"]:
+        r = client.table("commitments").select("id", count="exact").eq("ots_status", status_val).execute()
+        results["commitments"][status_val] = r.count if hasattr(r, 'count') and r.count else len(r.data or [])
+    results["commitments"]["total"] = sum(results["commitments"][k] for k in ["pending", "submitted", "confirmed"])
+
+    # Count ones with no OTS receipt
+    r = client.table("commitments").select("id").is_("ots_receipt", "null").execute()
+    results["commitments"]["no_receipt"] = len(r.data or [])
+
+    # 3. Try to upgrade a few submitted (pending confirmation) commitments
+    submitted = client.table("commitments").select(
+        "id, mac, ots_receipt, ots_status, ots_digest, committed_at"
+    ).eq("ots_status", "submitted").limit(3).execute()
+
+    for c in (submitted.data or []):
+        try:
+            digest = build_ots_submit_digest(c["id"], c["mac"], c.get("committed_at", ""), c.get("ots_digest"))
+            upgraded = await upgrade_receipt(digest)
+            if upgraded:
+                ots_file = build_detached_ots_file(digest, upgraded, "confirmed")
+                block_num = parse_bitcoin_block(ots_file)
+                if block_num:
+                    await db.update_ots(c["id"], ots_file, "confirmed", block_num)
+                    results["sample_checks"].append({
+                        "id": c["id"],
+                        "result": "confirmed",
+                        "bitcoin_block": block_num,
+                    })
+                else:
+                    results["sample_checks"].append({
+                        "id": c["id"],
+                        "result": "upgraded_but_no_block",
+                        "upgraded_bytes": len(upgraded),
+                    })
+            else:
+                results["sample_checks"].append({
+                    "id": c["id"],
+                    "result": "still_pending",
+                    "committed_at": c.get("committed_at"),
+                    "digest_prefix": digest.hex()[:16],
+                })
+        except Exception as e:
+            results["sample_checks"].append({
+                "id": c["id"],
+                "result": "error",
+                "error": str(e),
+            })
+
+    # 4. Check a confirmed one to make sure the .ots file is valid
+    confirmed = client.table("commitments").select(
+        "id, ots_receipt, bitcoin_block"
+    ).eq("ots_status", "confirmed").limit(1).execute()
+
+    if confirmed.data:
+        c = confirmed.data[0]
+        try:
+            ots_bytes = bytes.fromhex(c["ots_receipt"])
+            has_magic = ots_bytes[:15] == b'\x00OpenTimestamps'
+            results["confirmed_sample"] = {
+                "id": c["id"],
+                "bitcoin_block": c.get("bitcoin_block"),
+                "ots_file_size": len(ots_bytes),
+                "has_valid_magic": has_magic,
+            }
+        except Exception as e:
+            results["confirmed_sample"] = {"error": str(e)}
+
+    return results
+
+
 @app.get("/api/ots/{commitment_id}")
 async def get_ots_status(commitment_id: str):
     commitment = await db.get_commitment(commitment_id)
@@ -288,109 +393,3 @@ async def delete_commitment(commitment_id: str, request: Request):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "1.0.0"}
-
-
-@app.get("/api/ots/diagnostics")
-async def ots_diagnostics():
-    """
-    Run diagnostics on the OTS Bitcoin anchoring system.
-    Checks: calendar connectivity, pending/confirmed counts, sample verification.
-    """
-    from ots import OTS_CALENDARS, submit_to_calendar, upgrade_receipt, build_ots_submit_digest, parse_bitcoin_block, build_detached_ots_file
-    import hashlib
-
-    results = {
-        "calendars": [],
-        "commitments": {"total": 0, "pending": 0, "submitted": 0, "confirmed": 0, "no_receipt": 0},
-        "sample_checks": [],
-    }
-
-    # 1. Check calendar connectivity
-    test_digest = hashlib.sha256(b"psi-commit-diagnostic-test").digest()
-    for cal_url in OTS_CALENDARS:
-        try:
-            body = await submit_to_calendar(cal_url, test_digest)
-            results["calendars"].append({
-                "url": cal_url,
-                "status": "ok" if body else "no_response",
-                "response_bytes": len(body) if body else 0,
-            })
-        except Exception as e:
-            results["calendars"].append({
-                "url": cal_url,
-                "status": "error",
-                "error": str(e),
-            })
-
-    # 2. Count commitments by OTS status
-    client = get_client()
-
-    for status_val in ["pending", "submitted", "confirmed"]:
-        r = client.table("commitments").select("id", count="exact").eq("ots_status", status_val).execute()
-        results["commitments"][status_val] = r.count if hasattr(r, 'count') and r.count else len(r.data or [])
-    results["commitments"]["total"] = sum(results["commitments"][k] for k in ["pending", "submitted", "confirmed"])
-
-    # Count ones with no OTS receipt
-    r = client.table("commitments").select("id").is_("ots_receipt", "null").execute()
-    results["commitments"]["no_receipt"] = len(r.data or [])
-
-    # 3. Try to upgrade a few submitted (pending confirmation) commitments
-    submitted = client.table("commitments").select(
-        "id, mac, ots_receipt, ots_status, ots_digest, committed_at"
-    ).eq("ots_status", "submitted").limit(3).execute()
-
-    for c in (submitted.data or []):
-        try:
-            digest = build_ots_submit_digest(c["id"], c["mac"], c.get("committed_at", ""), c.get("ots_digest"))
-            upgraded = await upgrade_receipt(digest)
-            if upgraded:
-                ots_file = build_detached_ots_file(digest, upgraded, "confirmed")
-                block_num = parse_bitcoin_block(ots_file)
-                if block_num:
-                    # Actually confirm it in DB
-                    await db.update_ots(c["id"], ots_file, "confirmed", block_num)
-                    results["sample_checks"].append({
-                        "id": c["id"],
-                        "result": "confirmed",
-                        "bitcoin_block": block_num,
-                    })
-                else:
-                    results["sample_checks"].append({
-                        "id": c["id"],
-                        "result": "upgraded_but_no_block",
-                        "upgraded_bytes": len(upgraded),
-                    })
-            else:
-                results["sample_checks"].append({
-                    "id": c["id"],
-                    "result": "still_pending",
-                    "committed_at": c.get("committed_at"),
-                    "digest_prefix": digest.hex()[:16],
-                })
-        except Exception as e:
-            results["sample_checks"].append({
-                "id": c["id"],
-                "result": "error",
-                "error": str(e),
-            })
-
-    # 4. Check a confirmed one to make sure the .ots file is valid
-    confirmed = client.table("commitments").select(
-        "id, ots_receipt, bitcoin_block"
-    ).eq("ots_status", "confirmed").limit(1).execute()
-
-    if confirmed.data:
-        c = confirmed.data[0]
-        try:
-            ots_bytes = bytes.fromhex(c["ots_receipt"])
-            has_magic = ots_bytes[:15] == b'\x00OpenTimestamps'
-            results["confirmed_sample"] = {
-                "id": c["id"],
-                "bitcoin_block": c.get("bitcoin_block"),
-                "ots_file_size": len(ots_bytes),
-                "has_valid_magic": has_magic,
-            }
-        except Exception as e:
-            results["confirmed_sample"] = {"error": str(e)}
-
-    return results
