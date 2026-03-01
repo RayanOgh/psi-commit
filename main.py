@@ -300,9 +300,9 @@ async def ots_debug(commitment_id: str):
     try:
         from opentimestamps.core.timestamp import DetachedTimestampFile
         from opentimestamps.core.notary import PendingAttestation, BitcoinBlockHeaderAttestation
-        import io
+        from opentimestamps.core.serialize import StreamDeserializationContext
 
-        ctx = io.BytesIO(ots_bytes)
+        ctx = StreamDeserializationContext(ots_bytes)
         detached = DetachedTimestampFile.deserialize(ctx)
         result["library_parse"] = "success"
         result["initial_msg"] = detached.timestamp.msg.hex()
