@@ -280,6 +280,34 @@
     object-fit: cover;
   }
 
+  .drop-zone {
+    border: 1px dashed var(--border);
+    padding: 1.5rem 1rem;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    line-height: 1.7;
+    min-height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: rgba(0,240,200,0.04);
+  }
+
+  .drop-zone.loaded {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(200,240,0,0.04);
+  }
+
   .profile-bio {
     font-size: 0.88rem;
     color: #999;
@@ -1398,10 +1426,13 @@
 
   <!-- VERIFY PANEL -->
   <div class="tab-panel" id="verify-panel">
-    <div class="app-card">
+
+    <!-- SECTION 1: Verify commitment (message + receipt) -->
+    <div class="app-card" style="margin-bottom:1.5rem">
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:1.25rem">Verify Commitment</div>
       <div class="field-group">
-        <label class="field-label" for="verify-paste">Step 1 — Paste your commitment receipt</label>
-        <textarea id="verify-paste" placeholder="Paste your full commitment receipt here..." style="min-height:160px;font-size:0.78rem" oninput="parseReceipt()"></textarea>
+        <label class="field-label">Step 1 — Paste your commitment receipt (.psc) or text receipt</label>
+        <textarea id="verify-paste" placeholder="Paste your full commitment receipt here..." style="min-height:120px;font-size:0.78rem" oninput="parseReceipt()"></textarea>
         <div style="font-family:var(--mono);font-size:0.68rem;color:var(--muted);margin-top:0.5rem">Fields will fill automatically when you paste your receipt.</div>
       </div>
       <div id="parsed-fields" style="display:none">
@@ -1428,13 +1459,47 @@
         </div>
       </div>
       <div class="field-group">
-        <label class="field-label" for="verify-message">Step 2 — Enter the original message to verify</label>
+        <label class="field-label">Step 2 — Enter the original message to verify</label>
         <textarea id="verify-message" placeholder="Type or paste the original message exactly as it was committed..." style="min-height:80px"></textarea>
       </div>
-      <button class="btn btn-primary" onclick="verifyCommitment()">Verify →</button>
+      <button class="btn btn-primary" onclick="verifyCommitment()">Verify Commitment →</button>
       <div class="verify-result" id="verify-result">
         <span class="verify-icon" id="verify-icon"></span>
         <span id="verify-msg"></span>
+      </div>
+    </div>
+
+    <!-- SECTION 2: Verify Bitcoin timestamp -->
+    <div class="app-card">
+      <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:1.25rem">Verify Bitcoin Timestamp</div>
+      <p style="font-size:0.85rem;color:#999;margin-bottom:1.5rem;line-height:1.7">Drop your <strong style="color:var(--white)">.ots</strong> and <strong style="color:var(--white)">.stamp.txt</strong> files to verify the Bitcoin timestamp independently — no trust in us required.</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem">
+        <div>
+          <label class="field-label" style="margin-bottom:0.5rem;display:block">① Drop .ots file</label>
+          <div id="ots-drop-zone" class="drop-zone" ondragover="event.preventDefault()" ondrop="handleOTSDrop(event)" onclick="document.getElementById('ots-file-input').click()">
+            <div id="ots-drop-label">Drop .ots file here<br><span style="font-size:0.65rem;color:#555">or click to browse</span></div>
+            <input type="file" id="ots-file-input" accept=".ots" style="display:none" onchange="handleOTSFile(this.files[0])">
+          </div>
+        </div>
+        <div>
+          <label class="field-label" style="margin-bottom:0.5rem;display:block">② Drop .stamp.txt file</label>
+          <div id="stamp-drop-zone" class="drop-zone" ondragover="event.preventDefault()" ondrop="handleStampDrop(event)" onclick="document.getElementById('stamp-file-input').click()">
+            <div id="stamp-drop-label">Drop .stamp.txt file here<br><span style="font-size:0.65rem;color:#555">or click to browse</span></div>
+            <input type="file" id="stamp-file-input" accept=".txt" style="display:none" onchange="handleStampFile(this.files[0])">
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" onclick="verifyOTS()" id="verify-ots-btn" disabled style="opacity:0.4">Verify Bitcoin Timestamp →</button>
+
+      <div class="verify-result" id="ots-verify-result" style="display:none;margin-top:1rem">
+        <span class="verify-icon" id="ots-verify-icon"></span>
+        <span id="ots-verify-msg"></span>
+      </div>
+
+      <div style="margin-top:1.5rem;font-family:var(--mono);font-size:0.65rem;color:#444;line-height:1.8">
+        You can also verify on <a href="https://dgi.io/ots/" target="_blank" style="color:var(--muted)">dgi.io/ots</a> or <a href="https://opentimestamps.org" target="_blank" style="color:var(--muted)">opentimestamps.org</a> — drop .ots in box 1, .stamp.txt in box 2.
       </div>
     </div>
   </div>
@@ -2714,6 +2779,120 @@ async function submitComment() {
 
   document.getElementById('comment-input').value = '';
   await loadComments(currentCommentsId);
+}
+
+// ── OTS FILE VERIFICATION ──
+let otsFileBytes = null;
+let stampFileText = null;
+
+function handleOTSDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) handleOTSFile(file);
+}
+
+function handleStampDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) handleStampFile(file);
+}
+
+function handleOTSFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    otsFileBytes = new Uint8Array(e.target.result);
+    const zone = document.getElementById('ots-drop-zone');
+    zone.classList.add('loaded');
+    document.getElementById('ots-drop-label').textContent = `✓ ${file.name} (${otsFileBytes.length} bytes)`;
+    checkOTSReady();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function handleStampFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    stampFileText = e.target.result;
+    const zone = document.getElementById('stamp-drop-zone');
+    zone.classList.add('loaded');
+    document.getElementById('stamp-drop-label').textContent = `✓ ${file.name}`;
+    checkOTSReady();
+  };
+  reader.readAsText(file);
+}
+
+function checkOTSReady() {
+  const btn = document.getElementById('verify-ots-btn');
+  if (otsFileBytes && stampFileText) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+  }
+}
+
+async function verifyOTS() {
+  const resultEl = document.getElementById('ots-verify-result');
+  const iconEl = document.getElementById('ots-verify-icon');
+  const msgEl = document.getElementById('ots-verify-msg');
+
+  resultEl.style.display = 'flex';
+  resultEl.className = 'verify-result show';
+  iconEl.textContent = '⏳';
+  msgEl.textContent = 'Verifying Bitcoin timestamp...';
+
+  try {
+    // Step 1: SHA256 the stamp file
+    const stampBytes = new TextEncoder().encode(stampFileText);
+    const stampHashBuf = await crypto.subtle.digest('SHA-256', stampBytes);
+    const stampHash = new Uint8Array(stampHashBuf);
+    const stampHex = Array.from(stampHash).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    // Step 2: Parse stamp file to show what it contains
+    const lines = stampFileText.trim().split('\n');
+    const stampData = {};
+    lines.forEach(l => {
+      const idx = l.indexOf(': ');
+      if (idx > -1) stampData[l.slice(0, idx)] = l.slice(idx + 2);
+    });
+
+    // Step 3: Send .ots and stamp digest to our backend for verification
+    const otsHex = Array.from(otsFileBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const res = await fetch(`${API_BASE}/api/ots/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ots_hex: otsHex, stamp_digest: stampHex })
+    });
+
+    const data = await res.json();
+
+    if (data.status === 'confirmed') {
+      resultEl.className = 'verify-result show valid';
+      iconEl.textContent = '✓';
+      msgEl.innerHTML = `Bitcoin Timestamp Verified<br>
+        <span style="font-size:0.75rem;color:#999;font-family:var(--mono)">
+          Commitment ID: ${escapeHtml(stampData['id'] || '—')}<br>
+          Bitcoin block: #${data.bitcoin_block}<br>
+          Stamp digest: ${stampHex.slice(0, 16)}...<br>
+          <a href="https://blockstream.info/block-height/${data.bitcoin_block}" target="_blank" style="color:var(--accent2)">View block on blockstream.info ↗</a>
+        </span>`;
+    } else if (data.status === 'pending') {
+      resultEl.className = 'verify-result show';
+      iconEl.textContent = '⏳';
+      msgEl.innerHTML = `Pending Bitcoin Confirmation<br>
+        <span style="font-size:0.75rem;color:#999;font-family:var(--mono)">
+          The .ots file is valid but Bitcoin anchoring is still in progress.<br>
+          Usually takes 1-2 hours. Try again later.
+        </span>`;
+    } else {
+      resultEl.className = 'verify-result show invalid';
+      iconEl.textContent = '✗';
+      msgEl.textContent = data.message || 'Verification failed — the .ots and .stamp.txt files do not match.';
+    }
+  } catch(e) {
+    resultEl.className = 'verify-result show invalid';
+    iconEl.textContent = '✗';
+    msgEl.textContent = 'Error during verification: ' + e.message;
+  }
 }
 
 // ── UTILS ──
