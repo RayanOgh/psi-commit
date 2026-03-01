@@ -31,7 +31,9 @@ async def poll_ots_confirmations():
                     status = await check_ots_status(
                         commitment["id"],
                         commitment["mac"],
-                        commitment["ots_receipt"]
+                        commitment["ots_receipt"],
+                        ots_digest=commitment.get("ots_digest"),
+                        timestamp=commitment.get("committed_at", "")
                     )
                     if status.get("status") == "confirmed":
                         print(f"[OTS] confirmed {commitment['id']} in Bitcoin block #{status.get('bitcoin_block')}")
@@ -72,6 +74,7 @@ class CommitmentPost(BaseModel):
     timestamp: str
     user_id: Optional[str] = None
     visibility: Optional[str] = "public"
+    psc_digest: Optional[str] = None  # SHA256 of canonical PSC JSON
 
 
 class RevealPost(BaseModel):
@@ -110,7 +113,9 @@ async def post_commitment(data: CommitmentPost):
     }
 
     await db.insert_commitment(commitment)
-    asyncio.create_task(anchor_commitment(data.id, data.mac))
+    # Use PSC digest for OTS if provided, otherwise fall back to MAC
+    ots_digest = data.psc_digest or None
+    asyncio.create_task(anchor_commitment(data.id, data.mac, timestamp=data.timestamp, psc_digest=ots_digest))
 
     return {
         "success": True,
