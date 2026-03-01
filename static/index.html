@@ -1443,11 +1443,27 @@
     <div class="app-card" style="margin-bottom:1.5rem">
       <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.5rem">Verify Commitment</div>
       <p style="font-size:0.82rem;color:#777;margin-bottom:1.25rem;line-height:1.7">Prove a message matches a commitment using only the receipt. The math runs entirely in your browser — no server, no internet, no trust required.</p>
+
       <div class="field-group">
-        <label class="field-label">Step 1 — Paste your commitment receipt (.psc) or text receipt</label>
-        <textarea id="verify-paste" placeholder="Paste your full commitment receipt here..." style="min-height:120px;font-size:0.78rem" oninput="parseReceipt()"></textarea>
-        <div style="font-family:var(--mono);font-size:0.68rem;color:var(--muted);margin-top:0.5rem">Fields will fill automatically when you paste your receipt.</div>
+        <label class="field-label">Step 1 — Load your receipt</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.75rem">
+          <div>
+            <div id="psc-drop-zone" class="drop-zone" ondragover="event.preventDefault()" ondrop="handlePSCDrop(event)" onclick="document.getElementById('psc-file-input').click()">
+              <div id="psc-drop-label">Drop .psc file here<br><span style="font-size:0.65rem;color:#555">or click to browse</span></div>
+              <input type="file" id="psc-file-input" accept=".psc,.json" style="display:none" onchange="handlePSCFile(this.files[0])">
+            </div>
+          </div>
+          <div>
+            <div id="msg-drop-zone" class="drop-zone" ondragover="event.preventDefault()" ondrop="handleMsgDrop(event)" onclick="document.getElementById('msg-file-input').click()">
+              <div id="msg-drop-label">Drop .txt message file<br><span style="font-size:0.65rem;color:#555">or type below</span></div>
+              <input type="file" id="msg-file-input" accept=".txt" style="display:none" onchange="handleMsgFile(this.files[0])">
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-bottom:0.75rem">— or paste receipt text —</div>
+        <textarea id="verify-paste" placeholder="Paste .psc JSON or text receipt here..." style="min-height:80px;font-size:0.78rem" oninput="parseReceipt()"></textarea>
       </div>
+
       <div id="parsed-fields" style="display:none">
         <div style="font-family:var(--mono);font-size:0.68rem;letter-spacing:0.15em;color:var(--accent);text-transform:uppercase;margin-bottom:1rem;padding-bottom:0.5rem;border-bottom:1px solid var(--border)">Parsed from receipt ✓</div>
         <div class="field-group">
@@ -1689,6 +1705,7 @@ let currentUser = null;
 let currentProfile = null;
 let currentCommitment = null;
 let wallItems = [];
+let wallItemsMap = {};
 let commitVisibility = 'public';
 
 // ── AVATAR GENERATION ──
@@ -2493,6 +2510,7 @@ async function addToWall() {
 }
 
 function buildWallItem(item, isOwner = false) {
+  wallItemsMap[item.id] = item;
   const ts = item.committed_at || item.timestamp || '';
   const commitDate = ts ? new Date(ts).toLocaleString('en-US', {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}) : '';
   const revealed = item.revealed;
@@ -2529,6 +2547,18 @@ function buildWallItem(item, isOwner = false) {
       ${otsLine}
       <div class="wall-message" style="margin-top:0.6rem">${msg}</div>
       <div class="wall-meta">Context: ${item.context} · MAC: ${item.mac.substring(0,16)}...</div>
+      ${revealed && item.revealed_key ? `
+      <details style="margin-top:0.5rem">
+        <summary style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);cursor:pointer;user-select:none">🔓 Cryptographic proof (verify yourself)</summary>
+        <div style="background:var(--black);border:1px solid #333;padding:1rem;margin-top:0.5rem;font-family:var(--mono);font-size:0.68rem;line-height:2;word-break:break-all;color:#999">
+          <div>KEY: <span style="color:var(--accent2)">${item.revealed_key}</span></div>
+          <div>MAC: <span style="color:var(--white)">${item.mac}</span></div>
+          <div>NONCE: <span style="color:var(--white)">${item.nonce}</span></div>
+          <div>DOMAIN: <span style="color:var(--white)">${item.domain}</span></div>
+        </div>
+        <button class="btn btn-outline" style="font-size:0.6rem;padding:0.3rem 0.7rem;margin-top:0.5rem;color:var(--accent2);border-color:var(--accent2)" onclick="prefillVerify('${item.id}')">Verify in browser →</button>
+      </details>
+      ` : ''}
       <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap">
         ${!revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem" onclick="revealItem('${item.id}')">Reveal</button>` : ''}
         ${revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2);border-color:var(--accent2)" onclick="openComments('${item.id}')">💬 Comments</button>` : ''}
@@ -2835,6 +2865,59 @@ async function submitComment() {
 
   document.getElementById('comment-input').value = '';
   await loadComments(currentCommentsId);
+}
+
+// ── PSC + MESSAGE FILE VERIFICATION ──
+function handlePSCDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) handlePSCFile(file);
+}
+
+function handleMsgDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) handleMsgFile(file);
+}
+
+function handlePSCFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const text = e.target.result;
+    document.getElementById('verify-paste').value = text;
+    parseReceipt();
+    const zone = document.getElementById('psc-drop-zone');
+    zone.classList.add('loaded');
+    document.getElementById('psc-drop-label').textContent = `✓ ${file.name}`;
+  };
+  reader.readAsText(file);
+}
+
+function handleMsgFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('verify-message').value = e.target.result;
+    const zone = document.getElementById('msg-drop-zone');
+    zone.classList.add('loaded');
+    document.getElementById('msg-drop-label').textContent = `✓ ${file.name}`;
+  };
+  reader.readAsText(file);
+}
+
+function prefillVerify(commitmentId) {
+  const item = wallItemsMap[commitmentId];
+  if (!item) { alert('Commitment data not found.'); return; }
+
+  // Switch to verify tab and pre-fill all fields
+  switchTab('verify');
+  document.getElementById('p-key').value = item.revealed_key || '';
+  document.getElementById('p-mac').value = item.mac || '';
+  document.getElementById('p-nonce').value = item.nonce || '';
+  document.getElementById('p-context').value = (item.context || item.domain || '').replace('psi-commit.v1.', '');
+  document.getElementById('p-id').value = item.id || '';
+  document.getElementById('verify-message').value = item.revealed_message || '';
+  document.getElementById('parsed-fields').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ── OTS FILE VERIFICATION ──
