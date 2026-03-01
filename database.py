@@ -123,7 +123,7 @@ class Database:
         client = get_client()
         result = (
             client.table("commitments")
-            .select("id, mac, ots_receipt, ots_status, ots_digest")
+            .select("id, mac, ots_receipt, ots_status, ots_digest, committed_at")
             .eq("ots_status", "submitted")
             .execute()
         )
