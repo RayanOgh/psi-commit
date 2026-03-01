@@ -90,6 +90,12 @@ async def serve_frontend():
     return FileResponse("static/index.html")
 
 
+@app.get("/wall/{invite_code}")
+async def serve_wall_invite(invite_code: str):
+    # Serve the frontend — JS will handle the invite code from the URL path
+    return FileResponse("static/index.html")
+
+
 @app.post("/api/commit")
 async def post_commitment(data: CommitmentPost):
     existing = await db.get_commitment(data.id)
