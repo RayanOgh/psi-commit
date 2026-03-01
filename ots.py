@@ -47,6 +47,17 @@ def build_stamp_file(commitment_id: str, mac_hex: str, timestamp: str) -> str:
     ])
 
 
+def normalize_timestamp(ts: str) -> str:
+    """
+    Normalize timestamp format.
+    Supabase may return +00:00 instead of Z, but browser sends Z.
+    The stamp file must match what the browser generated.
+    """
+    if ts.endswith('+00:00'):
+        ts = ts[:-6] + 'Z'
+    return ts
+
+
 def build_ots_submit_digest(commitment_id: str, mac_hex: str, timestamp: str, psc_digest: str = None) -> bytes:
     """
     Get the 32-byte digest to submit to OTS.
@@ -55,30 +66,33 @@ def build_ots_submit_digest(commitment_id: str, mac_hex: str, timestamp: str, ps
     """
     if psc_digest:
         return bytes.fromhex(psc_digest)
-    stamp = build_stamp_file(commitment_id, mac_hex, timestamp)
+    stamp = build_stamp_file(commitment_id, mac_hex, normalize_timestamp(timestamp))
     return sha256(stamp.encode('utf-8'))
 
 
 def build_detached_ots_file(digest: bytes, calendar_receipt_body: bytes, calendar_url: str) -> bytes:
     """
-    Build a proper .ots detached timestamp file from:
-    - digest: the 32-byte SHA256 we submitted (NOT included in file)
-    - calendar_receipt_body: the raw bytes returned by the calendar
-    - calendar_url: the calendar URL
+    Build a proper .ots detached timestamp file.
 
-    OTS detached format:
-      magic + version + file_hash_op(SHA256) + timestamp_operations
-    The digest is NOT embedded — the verifier computes it from the original file.
+    OTS DetachedTimestampFile format:
+      magic(31) + version(1) + hash_op(1) + digest(32, raw) + timestamp_operations
+
+    The digest is included as raw bytes (NO length prefix).
+    The verifier reads exactly DIGEST_LENGTH bytes based on the hash_op.
     """
     import io
     out = io.BytesIO()
 
     # Magic + version
-    out.write(OTS_MAGIC)
-    out.write(OTS_VERSION)
+    out.write(OTS_MAGIC)       # 31 bytes
+    out.write(OTS_VERSION)     # 1 byte
 
     # File hash operation: SHA256 (0x08)
-    out.write(OP_SHA256)
+    out.write(OP_SHA256)       # 1 byte
+
+    # The digest — raw 32 bytes, NO varint/length prefix
+    assert len(digest) == 32, f"Digest must be 32 bytes, got {len(digest)}"
+    out.write(digest)          # 32 bytes
 
     # Timestamp operations from calendar (merkle path + attestation)
     out.write(calendar_receipt_body)
@@ -182,9 +196,9 @@ async def check_ots_status(commitment_id: str, mac_hex: str, ots_receipt_hex: st
 
 
 async def upgrade_receipt(digest: bytes) -> Optional[bytes]:
-    """Query calendar /timestamp/ endpoint to get confirmed receipt body."""
+    """Query calendar /timestamp/ endpoint to get upgraded receipt body."""
     commitment_hex = digest.hex()
-    print(f"[OTS] Checking confirmation for: {commitment_hex[:16]}...")
+    print(f"[OTS] Checking upgrade for: {commitment_hex[:16]}...")
 
     for calendar_url in OTS_CALENDARS:
         try:
@@ -194,24 +208,28 @@ async def upgrade_receipt(digest: bytes) -> Optional[bytes]:
                     headers={"Accept": "application/octet-stream"}
                 )
                 if response.status_code == 200 and len(response.content) > 0:
-                    print(f"[OTS] Confirmed receipt from {calendar_url} ({len(response.content)} bytes)")
+                    print(f"[OTS] Got receipt from {calendar_url} ({len(response.content)} bytes)")
                     return response.content
                 elif response.status_code == 404:
-                    print(f"[OTS] Not yet confirmed on {calendar_url}")
+                    print(f"[OTS] Not yet available on {calendar_url}")
         except Exception as e:
             print(f"[OTS] Error: {calendar_url}: {e}")
 
     return None
 
 
-def parse_bitcoin_block(receipt_bytes: bytes) -> Optional[int]:
-    """Extract Bitcoin block number from confirmed OTS receipt."""
+def parse_bitcoin_block(ots_file_bytes: bytes) -> Optional[int]:
+    """
+    Extract Bitcoin block number from a complete .ots file.
+    Returns None if the file contains only a pending attestation (not yet confirmed).
+    """
+    # Try the opentimestamps library first
     try:
         from opentimestamps.core.timestamp import DetachedTimestampFile
         from opentimestamps.core.notary import BitcoinBlockHeaderAttestation
         import io
 
-        ctx = io.BytesIO(receipt_bytes)
+        ctx = io.BytesIO(ots_file_bytes)
         detached = DetachedTimestampFile.deserialize(ctx)
 
         def find_block(ts):
@@ -220,27 +238,24 @@ def parse_bitcoin_block(receipt_bytes: bytes) -> Optional[int]:
                     return att.height
             for op, child in ts.ops.items():
                 r = find_block(child)
-                if r: return r
+                if r is not None:
+                    return r
             return None
 
         block = find_block(detached.timestamp)
         if block:
             print(f"[OTS] Bitcoin block #{block}")
             return block
+        else:
+            print(f"[OTS] Parsed OK but no Bitcoin attestation yet (still pending)")
+            return None
+
+    except ImportError:
+        print(f"[OTS] opentimestamps library not installed — cannot parse .ots files")
+        return None
     except Exception as e:
         print(f"[OTS] Library parse failed: {e}")
-
-    # Fallback heuristic
-    try:
-        for i in range(len(receipt_bytes) - 4):
-            val = int.from_bytes(receipt_bytes[i:i+4], 'big')
-            if 880_000 <= val <= 1_500_000:
-                print(f"[OTS] Heuristic block #{val}")
-                return val
-    except Exception:
-        pass
-
-    return None
+        return None
 
 
 def get_ots_verify_url(commitment_id: str) -> str:
