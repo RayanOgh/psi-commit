@@ -1386,8 +1386,9 @@
           ⚠ SAVE THIS RECEIPT. Your secret key is not stored anywhere. If you lose it, you can never prove this commitment.
         </div>
         <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Receipt</button>
-          <button class="btn btn-outline" onclick="downloadPDF()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Save as PDF</button>
+          <button class="btn btn-primary" onclick="downloadPSC()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download Receipt (.psc)</button>
+          <button class="btn btn-outline" onclick="exportOTS()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="export-ots-btn">↓ Export .ots File</button>
+          <button class="btn btn-outline" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Text</button>
           <button class="btn btn-outline" onclick="addToWall()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="add-wall-btn">+ Add to Wall</button>
         </div>
       </div>
@@ -2009,9 +2010,25 @@ async function createCommitment() {
       console.log('Auto-save failed, manual add still works');
     }
   }
+
+  // Fetch OTS receipt from server (may take a few seconds after anchor)
+  setTimeout(async () => {
+    try {
+      const r = await fetch(`${API_BASE}/api/commitment/${id}`);
+      if (r.ok) {
+        const data = await r.json();
+        if (data.ots_receipt) {
+          currentCommitment.otsHex = data.ots_receipt;
+        }
+      }
+    } catch(e) {}
+  }, 3000);
+
+  // Auto-download .psc receipt
+  promptAndDownloadPSC();
 }
 
-// ── COPY / PDF ──
+// ── COPY / DOWNLOAD ──
 function copyCard() {
   const text = document.getElementById('commitment-card').textContent;
   navigator.clipboard.writeText(text).then(() => {
@@ -2022,24 +2039,133 @@ function copyCard() {
   });
 }
 
-function downloadPDF() {
+function buildPSCData(commitment) {
+  return {
+    version: '1',
+    id: commitment.id,
+    message: commitment.message,
+    mac: commitment.mac,
+    key: commitment.key,
+    nonce: commitment.nonce,
+    domain: commitment.domain,
+    context: commitment.context,
+    timestamp: commitment.timestamp,
+    visibility: commitment.visibility,
+    ots: commitment.otsHex || null,
+    created_by: 'psicommit.com'
+  };
+}
+
+function promptAndDownloadPSC() {
   if (!currentCommitment) return;
-  const card = document.getElementById('commitment-card').textContent;
-  const win = window.open('', '_blank');
-  win.document.write(`
-    <html><head><title>PSI-COMMIT Receipt</title>
-    <style>
-      body { font-family: monospace; font-size: 13px; padding: 40px; background: #fff; color: #111; max-width: 680px; margin: 0 auto; }
-      pre { white-space: pre-wrap; word-break: break-all; line-height: 1.8; }
-      h2 { font-family: sans-serif; font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; }
-    </style></head>
-    <body>
-      <h2>Cryptographic Commitment Receipt — psicommit.com</h2>
-      <pre>${escapeHtml(card)}</pre>
-      <script>window.onload = () => { window.print(); }<\/script>
-    </body></html>
-  `);
-  win.document.close();
+  const defaultName = `psc_${currentCommitment.id.replace('psc_', '')}_${new Date().toISOString().slice(0,10)}`;
+  const name = prompt('Name your receipt file:', defaultName);
+  if (name === null) return; // cancelled
+  const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
+  downloadPSCFile(filename);
+}
+
+function downloadPSC() {
+  if (!currentCommitment) return;
+  const defaultName = `psc_${currentCommitment.id.replace('psc_', '')}_${new Date().toISOString().slice(0,10)}`;
+  const name = prompt('Name your receipt file:', defaultName);
+  if (name === null) return;
+  const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
+  downloadPSCFile(filename);
+}
+
+function downloadPSCFile(filename) {
+  const data = buildPSCData(currentCommitment);
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename + '.psc';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportOTS(commitment = null) {
+  const c = commitment || currentCommitment;
+  if (!c) return;
+
+  const otsHex = c.otsHex || c.ots_receipt;
+  if (!otsHex) {
+    alert('OTS receipt not yet available. Bitcoin anchoring is in progress — try again in a few minutes, or re-download from your profile once anchoring completes.');
+    return;
+  }
+
+  // Convert hex to binary
+  const bytes = new Uint8Array(otsHex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+  const blob = new Blob([bytes], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+
+  const defaultName = c.id || 'commitment';
+  const name = prompt('Name your .ots file:', defaultName.replace('psc_', ''));
+  if (name === null) return;
+  const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename + '.ots';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadCommitmentPSC(commitmentId) {
+  // Download .psc for an existing commitment from profile page
+  const { data: c } = await sb
+    .from('commitments')
+    .select('*')
+    .eq('id', commitmentId)
+    .single();
+
+  if (!c) { alert('Commitment not found.'); return; }
+
+  // Note: key is NOT stored server-side — we can only include what we have
+  const data = {
+    version: '1',
+    id: c.id,
+    message: c.revealed_message || null,
+    mac: c.mac,
+    key: null, // not stored server-side — user must have saved their original .psc
+    nonce: c.nonce,
+    domain: c.domain,
+    context: c.context,
+    timestamp: c.committed_at,
+    visibility: c.visibility,
+    ots: c.ots_receipt || null,
+    bitcoin_block: c.bitcoin_block || null,
+    ots_status: c.ots_status,
+    note: 'Secret key not included — retrieve from your original .psc receipt.',
+    created_by: 'psicommit.com'
+  };
+
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = c.id + '.psc';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportCommitmentOTS(commitmentId) {
+  // Export .ots for an existing commitment from profile page
+  const { data: c } = await sb
+    .from('commitments')
+    .select('id, ots_receipt, ots_status')
+    .eq('id', commitmentId)
+    .single();
+
+  if (!c?.ots_receipt) {
+    alert('OTS receipt not available yet. Bitcoin anchoring is in progress.');
+    return;
+  }
+
+  exportOTS({ id: c.id, otsHex: c.ots_receipt, ots_receipt: c.ots_receipt });
 }
 
 // ── PARSE RECEIPT ──
@@ -2188,6 +2314,8 @@ function buildWallItem(item, isOwner = false) {
       <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap">
         ${!revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem" onclick="revealItem('${item.id}')">Reveal</button>` : ''}
         ${revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2);border-color:var(--accent2)" onclick="openComments('${item.id}')">💬 Comments</button>` : ''}
+        ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="downloadCommitmentPSC('${item.id}')">↓ .psc</button>` : ''}
+        ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="exportCommitmentOTS('${item.id}')">↓ .ots</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:#ff6060;border-color:#ff6060" onclick="deleteCommitment('${item.id}')">Delete</button>` : ''}
       </div>
     </div>
