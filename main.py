@@ -469,7 +469,7 @@ async def reveal_commitment(commitment_id: str, data: RevealPost):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid key format")
 
-    await db.reveal_commitment(commitment_id, data.message)
+    await db.reveal_commitment(commitment_id, data.message, data.key_hex)
 
     return {
         "success": True,
