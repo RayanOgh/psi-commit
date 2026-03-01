@@ -62,12 +62,13 @@ def build_ots_submit_digest(commitment_id: str, mac_hex: str, timestamp: str, ps
 def build_detached_ots_file(digest: bytes, calendar_receipt_body: bytes, calendar_url: str) -> bytes:
     """
     Build a proper .ots detached timestamp file from:
-    - digest: the 32-byte SHA256 we submitted
-    - calendar_receipt_body: the raw bytes returned by the calendar POST /digest
-    - calendar_url: the calendar URL (encoded in PendingAttestation)
+    - digest: the 32-byte SHA256 we submitted (NOT included in file)
+    - calendar_receipt_body: the raw bytes returned by the calendar
+    - calendar_url: the calendar URL
 
-    Format:
-      magic + version + file_hash_op(SHA256) + digest_length + digest + calendar_body
+    OTS detached format:
+      magic + version + file_hash_op(SHA256) + timestamp_operations
+    The digest is NOT embedded — the verifier computes it from the original file.
     """
     import io
     out = io.BytesIO()
@@ -79,11 +80,7 @@ def build_detached_ots_file(digest: bytes, calendar_receipt_body: bytes, calenda
     # File hash operation: SHA256 (0x08)
     out.write(OP_SHA256)
 
-    # The digest (32 bytes, length-prefixed as varint)
-    out.write(_encode_varint(len(digest)))
-    out.write(digest)
-
-    # Append the calendar's response body (contains the merkle path + pending attestation)
+    # Timestamp operations from calendar (merkle path + attestation)
     out.write(calendar_receipt_body)
 
     return out.getvalue()
