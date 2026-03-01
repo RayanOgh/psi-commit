@@ -1702,9 +1702,14 @@
   <div style="background:#111;border:1px solid var(--border);padding:1.5rem;margin-bottom:2rem;text-align:left">
     <div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent);margin-bottom:0.5rem">WALL</div>
     <div style="font-size:1.2rem;font-family:var(--display)" id="join-wall-name">—</div>
+    <div style="color:#999;font-size:0.82rem;margin-top:0.5rem" id="join-wall-desc"></div>
+    <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.75rem" id="join-wall-leader"></div>
   </div>
   <button class="btn btn-primary" onclick="requestToJoinWall()" id="join-request-btn">Request to Join →</button>
   <div id="join-request-result" style="margin-top:1rem;font-family:var(--mono);font-size:0.75rem;color:var(--accent)"></div>
+  <div style="margin-top:2rem">
+    <button onclick="window.location.href='/'" style="background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:0.72rem;cursor:pointer">← Back to Home</button>
+  </div>
 </div>
 
 <script>
@@ -2108,44 +2113,61 @@ async function loadMyWalls() {
     memberWalls = mwalls || [];
   }
 
-  // Get pending requests
-  const { data: pending, error: e3 } = await sb.from('wall_members')
+  // Get my pending join requests (walls I applied to)
+  const { data: myPending, error: e3 } = await sb.from('wall_members')
     .select('wall_id')
     .eq('user_id', currentUser.id)
     .eq('status', 'pending');
 
   if (e3) { console.warn('[Walls] Error loading pending:', e3.message); }
 
+  // For walls I lead, get pending member counts
+  const pendingCounts = {};
+  if (created?.length) {
+    const wallIds = created.map(w => w.id);
+    const { data: pendingMembers } = await sb.from('wall_members')
+      .select('wall_id')
+      .in('wall_id', wallIds)
+      .eq('status', 'pending');
+    (pendingMembers || []).forEach(p => {
+      pendingCounts[p.wall_id] = (pendingCounts[p.wall_id] || 0) + 1;
+    });
+  }
+
   const allWalls = [
     ...(created || []).map(w => ({ ...w, role: 'leader' })),
     ...memberWalls.filter(w => !created?.find(c => c.id === w.id)).map(w => ({ ...w, role: 'member' }))
   ];
 
-  if (!allWalls.length && !pending?.length) {
+  if (!allWalls.length && !myPending?.length) {
     container.innerHTML = '<div class="wall-empty">No private walls yet. Create one or ask someone for an invite link.</div>';
     return;
   }
 
   let html = '<div style="display:flex;flex-direction:column;gap:1rem">';
 
-  if (pending?.length) {
-    html += `<div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-bottom:0.5rem">${pending.length} pending request(s)</div>`;
+  if (myPending?.length) {
+    html += `<div style="font-family:var(--mono);font-size:0.65rem;color:var(--accent2);margin-bottom:0.5rem">${myPending.length} pending join request(s) you've sent</div>`;
   }
 
   for (const wall of allWalls) {
     const isLeader = wall.role === 'leader';
     const link = `${window.location.origin}/wall/${wall.invite_code}`;
+    const pc = pendingCounts[wall.id] || 0;
     html += `
     <div style="border:1px solid var(--border);padding:1.25rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
       <div>
         <div style="font-family:var(--display);font-size:1.3rem;margin-bottom:0.25rem">${wall.name}</div>
         ${wall.description ? `<div style="color:#999;font-size:0.82rem">${wall.description}</div>` : ''}
-        <div style="font-family:var(--mono);font-size:0.62rem;color:${isLeader ? 'var(--accent)' : 'var(--accent2)'};margin-top:0.5rem">${isLeader ? '★ LEADER' : 'MEMBER'}</div>
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.5rem">
+          <span style="font-family:var(--mono);font-size:0.62rem;color:${isLeader ? 'var(--accent)' : 'var(--accent2)'}">${isLeader ? '★ LEADER' : 'MEMBER'}</span>
+          ${isLeader && pc ? `<span style="font-family:var(--mono);font-size:0.6rem;color:var(--accent2);background:#1a1206;padding:0.15rem 0.5rem;border-radius:2px">${pc} pending request${pc > 1 ? 's' : ''}</span>` : ''}
+        </div>
       </div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
         <button class="btn btn-outline" onclick="openWallPage('${wall.id}')" style="font-size:0.68rem;padding:0.4rem 0.9rem">View Wall</button>
         ${isLeader ? `<button class="btn btn-outline" onclick="copyToClipboard('${link}')" style="font-size:0.68rem;padding:0.4rem 0.9rem;color:var(--accent2)">Share Link</button>` : ''}
-        ${isLeader ? `<button class="btn btn-outline" onclick="manageWallMembers('${wall.id}')" style="font-size:0.68rem;padding:0.4rem 0.9rem">Manage Members</button>` : ''}
+        ${isLeader ? `<button class="btn btn-outline" onclick="manageWallMembers('${wall.id}')" style="font-size:0.68rem;padding:0.4rem 0.9rem">${pc ? '⚠ ' : ''}Manage Members</button>` : ''}
       </div>
     </div>`;
   }
@@ -2166,7 +2188,7 @@ async function openWallPage(wallId) {
   document.getElementById('wall-page').style.display = 'block';
   window.scrollTo(0, 0);
 
-  const { data: wall } = await sb.from('private_walls').select('*').eq('id', wallId).single();
+  const { data: wall } = await sb.from('private_walls').select('*, profiles(username, avatar_url, avatar_seed)').eq('id', wallId).single();
   if (!wall) { alert('Wall not found.'); return; }
 
   document.getElementById('wall-page-name').textContent = wall.name;
@@ -2176,41 +2198,67 @@ async function openWallPage(wallId) {
 
   // Actions
   const actionsEl = document.getElementById('wall-page-actions');
+  const link = `${window.location.origin}/wall/${wall.invite_code}`;
+  let actionsHtml = '';
   if (isLeader) {
-    const link = `${window.location.origin}/wall/${wall.invite_code}`;
-    actionsEl.innerHTML = `
+    actionsHtml = `
       <button class="btn btn-outline" onclick="copyToClipboard('${link}')" style="font-size:0.72rem">Share Invite Link</button>
       <button class="btn btn-outline" onclick="manageWallMembers('${wallId}')" style="font-size:0.72rem">Manage Members</button>
-      <button class="btn btn-primary" onclick="addCommitmentToWall('${wallId}')" style="font-size:0.72rem">+ Add Commitment</button>`;
+      <button class="btn btn-primary" onclick="addCommitmentToWall('${wallId}')" style="font-size:0.72rem">+ Add Commitment</button>
+      <button class="btn btn-outline" onclick="deleteWall('${wallId}')" style="font-size:0.72rem;color:#ff6060;border-color:#333">Delete Wall</button>`;
   } else {
-    actionsEl.innerHTML = `
-      <button class="btn btn-primary" onclick="addCommitmentToWall('${wallId}')" style="font-size:0.72rem">+ Add Commitment</button>`;
+    actionsHtml = `
+      <button class="btn btn-primary" onclick="addCommitmentToWall('${wallId}')" style="font-size:0.72rem">+ Add Commitment</button>
+      <button class="btn btn-outline" onclick="leaveWall('${wallId}')" style="font-size:0.72rem;color:#ff6060;border-color:#333">Leave Wall</button>`;
   }
+  actionsEl.innerHTML = actionsHtml;
 
-  // Load members
+  // Load members (including leader)
   const { data: members } = await sb.from('wall_members')
     .select('user_id, status, profiles(username, avatar_url, avatar_seed)')
     .eq('wall_id', wallId)
     .eq('status', 'approved');
 
-  const membersEl = document.getElementById('wall-page-members');
-  if (members?.length) {
-    membersEl.innerHTML = `
-      <div style="font-family:var(--mono);font-size:0.62rem;color:var(--muted);margin-bottom:0.75rem">MEMBERS (${members.length})</div>
-      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-        ${members.map(m => `
-          <div style="display:flex;align-items:center;gap:0.4rem;background:#111;padding:0.3rem 0.6rem;border:1px solid var(--border)">
-            <img src="${m.profiles?.avatar_url || getAvatarUrl(m.profiles?.avatar_seed || m.user_id)}" style="width:20px;height:20px;border-radius:50%">
-            <span style="font-size:0.72rem">@${m.profiles?.username || '—'}</span>
-          </div>`).join('')}
-      </div>`;
-  } else {
-    membersEl.innerHTML = '';
+  // Pending count for leader badge
+  let pendingCount = 0;
+  if (isLeader) {
+    const { data: pendingList } = await sb.from('wall_members')
+      .select('user_id')
+      .eq('wall_id', wallId)
+      .eq('status', 'pending');
+    pendingCount = pendingList?.length || 0;
   }
+
+  const membersEl = document.getElementById('wall-page-members');
+  const leaderProfile = wall.profiles;
+  const leaderAvatar = leaderProfile?.avatar_url || getAvatarUrl(leaderProfile?.avatar_seed || wall.creator_id);
+  const leaderName = leaderProfile?.username || 'Leader';
+
+  let membersHtml = `
+    <div style="font-family:var(--mono);font-size:0.62rem;color:var(--muted);margin-bottom:0.75rem">
+      MEMBERS (${(members?.length || 0) + 1})
+      ${pendingCount ? `<span style="color:var(--accent2);margin-left:0.5rem">${pendingCount} pending</span>` : ''}
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:0.4rem;background:#111;padding:0.3rem 0.6rem;border:1px solid var(--accent);cursor:pointer" onclick="showProfile('${wall.creator_id}')">
+        <img src="${leaderAvatar}" style="width:20px;height:20px;border-radius:50%">
+        <span style="font-size:0.72rem">@${leaderName}</span>
+        <span style="font-family:var(--mono);font-size:0.52rem;color:var(--accent)">★</span>
+      </div>`;
+
+  if (members?.length) {
+    membersHtml += members.map(m => `
+      <div style="display:flex;align-items:center;gap:0.4rem;background:#111;padding:0.3rem 0.6rem;border:1px solid var(--border);cursor:pointer" onclick="showProfile('${m.user_id}')">
+        <img src="${m.profiles?.avatar_url || getAvatarUrl(m.profiles?.avatar_seed || m.user_id)}" style="width:20px;height:20px;border-radius:50%">
+        <span style="font-size:0.72rem">@${m.profiles?.username || '—'}</span>
+      </div>`).join('');
+  }
+  membersHtml += '</div>';
+  membersEl.innerHTML = membersHtml;
 
   // Load commitments
   const { data: wallCommits } = await sb.from('wall_commitments')
-    .select('commitment_id, commitments(*)')
+    .select('commitment_id, commitments(*, profiles(username, avatar_url, avatar_seed))')
     .eq('wall_id', wallId)
     .order('added_at', { ascending: false });
 
@@ -2223,72 +2271,195 @@ async function openWallPage(wallId) {
   }
 }
 
+async function leaveWall(wallId) {
+  if (!confirm('Leave this wall? You will need to request access again to rejoin.')) return;
+  await sb.from('wall_members')
+    .delete()
+    .eq('wall_id', wallId)
+    .eq('user_id', currentUser.id);
+  backFromWall();
+  await loadMyWalls();
+}
+
+async function deleteWall(wallId) {
+  if (!confirm('Delete this wall permanently? All wall commitments links will be removed (commitments themselves are kept).')) return;
+  // Delete wall_commitments, wall_members, then the wall
+  await sb.from('wall_commitments').delete().eq('wall_id', wallId);
+  await sb.from('wall_members').delete().eq('wall_id', wallId);
+  await sb.from('private_walls').delete().eq('id', wallId);
+  backFromWall();
+  await loadMyWalls();
+}
+
 function backFromWall() {
   document.getElementById('wall-page').style.display = 'none';
   document.getElementById('main-page').classList.remove('hidden');
-  showProfile(viewingUserId);
+  // Clean up URL if we came from /wall/{code}
+  if (window.location.pathname.startsWith('/wall/')) {
+    window.history.pushState({}, '', '/');
+  }
+  if (viewingUserId && currentUser) {
+    showProfile(viewingUserId);
+  }
 }
 
 async function manageWallMembers(wallId) {
-  const { data: pending } = await sb.from('wall_members')
-    .select('user_id, status, profiles(username)')
+  // Fetch all members + pending
+  const { data: allMembers } = await sb.from('wall_members')
+    .select('user_id, status, joined_at, profiles(username, avatar_url, avatar_seed)')
     .eq('wall_id', wallId)
-    .eq('status', 'pending');
+    .order('joined_at', { ascending: true });
 
-  if (!pending?.length) {
-    alert('No pending join requests.');
-    return;
+  const pending = (allMembers || []).filter(m => m.status === 'pending');
+  const approved = (allMembers || []).filter(m => m.status === 'approved');
+
+  let html = '';
+
+  if (pending.length) {
+    html += `<div style="font-family:var(--mono);font-size:0.62rem;color:var(--accent2);letter-spacing:0.12em;margin-bottom:0.75rem">PENDING REQUESTS (${pending.length})</div>`;
+    for (const req of pending) {
+      const uname = req.profiles?.username || req.user_id.slice(0, 8);
+      const avatar = req.profiles?.avatar_url || getAvatarUrl(req.profiles?.avatar_seed || req.user_id);
+      html += `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem;border:1px solid var(--border);margin-bottom:0.5rem;background:#0a0a0a">
+        <div style="display:flex;align-items:center;gap:0.6rem">
+          <img src="${avatar}" style="width:28px;height:28px;border-radius:50%">
+          <span style="font-size:0.8rem">@${uname}</span>
+          <span style="font-family:var(--mono);font-size:0.58rem;color:var(--accent2);background:#1a1206;padding:0.15rem 0.5rem;border-radius:2px">PENDING</span>
+        </div>
+        <div style="display:flex;gap:0.4rem">
+          <button class="btn btn-primary" onclick="approveMember('${wallId}','${req.user_id}')" style="font-size:0.65rem;padding:0.35rem 0.8rem">Approve</button>
+          <button class="btn btn-outline" onclick="denyMember('${wallId}','${req.user_id}')" style="font-size:0.65rem;padding:0.35rem 0.8rem;color:#ff6060;border-color:#ff6060">Deny</button>
+        </div>
+      </div>`;
+    }
+    html += '<div style="margin-bottom:1.5rem"></div>';
   }
 
-  // Simple approval UI using confirm dialogs for now
-  for (const req of pending) {
-    const username = req.profiles?.username || req.user_id;
-    const approve = confirm(`Approve @${username} to join this wall?`);
-    if (approve) {
-      await sb.from('wall_members')
-        .update({ status: 'approved' })
-        .eq('wall_id', wallId)
-        .eq('user_id', req.user_id);
-    } else {
-      await sb.from('wall_members')
-        .delete()
-        .eq('wall_id', wallId)
-        .eq('user_id', req.user_id);
+  if (approved.length) {
+    html += `<div style="font-family:var(--mono);font-size:0.62rem;color:var(--muted);letter-spacing:0.12em;margin-bottom:0.75rem">APPROVED MEMBERS (${approved.length})</div>`;
+    for (const mem of approved) {
+      const uname = mem.profiles?.username || mem.user_id.slice(0, 8);
+      const avatar = mem.profiles?.avatar_url || getAvatarUrl(mem.profiles?.avatar_seed || mem.user_id);
+      html += `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem;border:1px solid var(--border);margin-bottom:0.5rem">
+        <div style="display:flex;align-items:center;gap:0.6rem">
+          <img src="${avatar}" style="width:28px;height:28px;border-radius:50%">
+          <span style="font-size:0.8rem">@${uname}</span>
+        </div>
+        <button class="btn btn-outline" onclick="removeMember('${wallId}','${mem.user_id}')" style="font-size:0.6rem;padding:0.3rem 0.6rem;color:#ff6060;border-color:#333">Remove</button>
+      </div>`;
     }
   }
-  alert('Done! Reload to see updated members.');
+
+  if (!pending.length && !approved.length) {
+    html = '<div class="wall-empty">No members yet. Share your invite link!</div>';
+  }
+
+  document.getElementById('members-modal-body').innerHTML = html;
+  document.getElementById('members-modal').classList.add('open');
+}
+
+function closeMembersModal() {
+  document.getElementById('members-modal').classList.remove('open');
+}
+
+async function approveMember(wallId, userId) {
+  await sb.from('wall_members')
+    .update({ status: 'approved' })
+    .eq('wall_id', wallId)
+    .eq('user_id', userId);
+  await manageWallMembers(wallId); // Refresh modal
+  if (currentWallId === wallId) await openWallPage(wallId); // Refresh wall page behind
+}
+
+async function denyMember(wallId, userId) {
+  await sb.from('wall_members')
+    .delete()
+    .eq('wall_id', wallId)
+    .eq('user_id', userId);
+  await manageWallMembers(wallId);
+}
+
+async function removeMember(wallId, userId) {
+  if (!confirm('Remove this member from the wall?')) return;
+  await sb.from('wall_members')
+    .delete()
+    .eq('wall_id', wallId)
+    .eq('user_id', userId);
+  await manageWallMembers(wallId);
+  if (currentWallId === wallId) await openWallPage(wallId);
 }
 
 async function addCommitmentToWall(wallId) {
-  // Show user's commitments to pick from
+  if (!currentUser) { openModal(); return; }
+
+  // Get user's commitments
   const { data: commits } = await sb.from('commitments')
-    .select('id, mac, committed_at, revealed, revealed_message')
+    .select('id, mac, context, committed_at, revealed, revealed_message, visibility')
     .eq('user_id', currentUser.id)
     .order('committed_at', { ascending: false });
 
-  if (!commits?.length) { alert('You have no commitments to add.'); return; }
-
-  const options = commits.map((c, i) => `${i + 1}. ${c.revealed ? c.revealed_message : c.id} (${new Date(c.committed_at).toLocaleDateString()})`).join('\n');
-  const choice = prompt(`Choose a commitment to add (enter number):\n\n${options}`);
-  if (!choice) return;
-
-  const idx = parseInt(choice) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= commits.length) { alert('Invalid choice.'); return; }
-
-  const commit = commits[idx];
-  const { error } = await sb.from('wall_commitments').insert({
-    wall_id: wallId,
-    commitment_id: commit.id
-  });
-
-  if (error) {
-    if (error.code === '23505') alert('This commitment is already on this wall.');
-    else alert('Error: ' + error.message);
+  if (!commits?.length) {
+    document.getElementById('add-commit-modal-body').innerHTML = '<div class="wall-empty">You have no commitments yet. Create one first!</div>';
+    document.getElementById('add-commit-modal').classList.add('open');
     return;
   }
 
-  alert('Commitment added to wall!');
-  await openWallPage(wallId);
+  // Check which are already on this wall
+  const { data: existing } = await sb.from('wall_commitments')
+    .select('commitment_id')
+    .eq('wall_id', wallId);
+  const existingIds = new Set((existing || []).map(e => e.commitment_id));
+
+  let html = '<div style="display:flex;flex-direction:column;gap:0.5rem;max-height:400px;overflow-y:auto">';
+  for (const c of commits) {
+    const alreadyAdded = existingIds.has(c.id);
+    const label = c.revealed ? c.revealed_message : (c.context || c.id.slice(0, 12) + '…');
+    const date = new Date(c.committed_at).toLocaleDateString();
+    html += `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem;border:1px solid var(--border);${alreadyAdded ? 'opacity:0.4;' : ''}">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
+        <div style="font-family:var(--mono);font-size:0.6rem;color:var(--muted);margin-top:0.2rem">${date} · ${c.visibility}</div>
+      </div>
+      ${alreadyAdded
+        ? '<span style="font-family:var(--mono);font-size:0.6rem;color:var(--muted)">Already added</span>'
+        : `<button class="btn btn-outline" onclick="confirmAddToWall('${wallId}','${c.id}',this)" style="font-size:0.65rem;padding:0.3rem 0.8rem;white-space:nowrap">+ Add</button>`
+      }
+    </div>`;
+  }
+  html += '</div>';
+
+  document.getElementById('add-commit-modal-body').innerHTML = html;
+  document.getElementById('add-commit-modal').classList.add('open');
+}
+
+async function confirmAddToWall(wallId, commitId, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+
+  const { error } = await sb.from('wall_commitments').insert({
+    wall_id: wallId,
+    commitment_id: commitId
+  });
+
+  if (error) {
+    if (error.code === '23505') btn.textContent = 'Already added';
+    else { btn.textContent = 'Error'; alert('Error: ' + error.message); }
+    return;
+  }
+
+  btn.textContent = '✓ Added';
+  btn.style.color = 'var(--accent)';
+  btn.style.borderColor = 'var(--accent)';
+
+  // Refresh wall page behind the modal
+  if (currentWallId === wallId) await openWallPage(wallId);
+}
+
+function closeAddCommitModal() {
+  document.getElementById('add-commit-modal').classList.remove('open');
 }
 
 // Handle invite link — check if URL has /wall/{code}
@@ -2298,8 +2469,11 @@ async function handleWallInviteLink() {
   if (!match) return false;
 
   const inviteCode = match[1];
+  // Store for post-login redirect
+  sessionStorage.setItem('psi_pending_invite', inviteCode);
+
   const { data: wall } = await sb.from('private_walls')
-    .select('*')
+    .select('*, profiles(username)')
     .eq('invite_code', inviteCode)
     .single();
 
@@ -2308,12 +2482,15 @@ async function handleWallInviteLink() {
     document.getElementById('main-page').classList.add('hidden');
     document.getElementById('join-request-page').style.display = 'block';
     document.getElementById('join-wall-name').textContent = 'Wall not found.';
+    document.getElementById('join-wall-desc').textContent = 'This invite link may have expired or been deleted.';
     document.getElementById('join-request-btn').style.display = 'none';
     return true;
   }
 
   // Check if user is already a member or leader
   if (currentUser) {
+    sessionStorage.removeItem('psi_pending_invite');
+
     if (wall.creator_id === currentUser.id) {
       await openWallPage(wall.id);
       return true;
@@ -2333,6 +2510,8 @@ async function handleWallInviteLink() {
       document.getElementById('main-page').classList.add('hidden');
       document.getElementById('join-request-page').style.display = 'block';
       document.getElementById('join-wall-name').textContent = wall.name;
+      document.getElementById('join-wall-desc').textContent = wall.description || '';
+      document.getElementById('join-wall-leader').textContent = wall.profiles?.username ? `Created by @${wall.profiles.username}` : '';
       document.getElementById('join-request-btn').textContent = 'Request Already Sent';
       document.getElementById('join-request-btn').disabled = true;
       document.getElementById('join-request-page').dataset.wallId = wall.id;
@@ -2344,14 +2523,27 @@ async function handleWallInviteLink() {
   document.getElementById('main-page').classList.add('hidden');
   document.getElementById('join-request-page').style.display = 'block';
   document.getElementById('join-wall-name').textContent = wall.name;
+  document.getElementById('join-wall-desc').textContent = wall.description || '';
+  document.getElementById('join-wall-leader').textContent = wall.profiles?.username ? `Created by @${wall.profiles.username}` : '';
   document.getElementById('join-request-page').dataset.wallId = wall.id;
+  if (!currentUser) {
+    document.getElementById('join-request-btn').textContent = 'Sign In to Request Access';
+  }
   return true;
 }
 
 async function requestToJoinWall() {
-  if (!currentUser) { openModal(); return; }
+  if (!currentUser) {
+    // Store intent and open login modal
+    openModal();
+    return;
+  }
   const wallId = document.getElementById('join-request-page').dataset.wallId;
   if (!wallId) return;
+
+  const btn = document.getElementById('join-request-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
 
   const { error } = await sb.from('wall_members').insert({
     wall_id: wallId,
@@ -2362,9 +2554,10 @@ async function requestToJoinWall() {
   const resultEl = document.getElementById('join-request-result');
   if (error) {
     resultEl.textContent = error.code === '23505' ? 'Request already sent.' : 'Error: ' + error.message;
+    btn.textContent = 'Request to Join →';
+    btn.disabled = false;
   } else {
-    document.getElementById('join-request-btn').disabled = true;
-    document.getElementById('join-request-btn').textContent = 'Request Sent';
+    btn.textContent = 'Request Sent ✓';
     resultEl.textContent = 'Your request has been sent. The wall leader will approve or deny it.';
   }
 }
@@ -3344,6 +3537,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentUser = session.user;
       await ensureProfile(session.user);
       updateAuthUI(session.user);
+
+      // Check for pending invite redirect after login
+      const pendingInvite = sessionStorage.getItem('psi_pending_invite');
+      if (pendingInvite) {
+        sessionStorage.removeItem('psi_pending_invite');
+        window.location.href = `/wall/${pendingInvite}`;
+      }
     }
   });
 
@@ -3410,6 +3610,38 @@ function showDirectory() {
     <div style="display:flex;gap:0.75rem;margin-top:1rem">
       <button class="btn btn-primary" onclick="copyWallLink()" style="flex:1">Copy Link</button>
       <button class="btn btn-outline" onclick="closeWallInvite()">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- MANAGE MEMBERS MODAL -->
+<div class="modal-overlay" id="members-modal" onclick="if(event.target===this)closeMembersModal()">
+  <div class="modal" style="max-width:540px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+      <div class="modal-title" style="margin:0">Manage Members</div>
+      <button onclick="closeMembersModal()" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;padding:0.25rem">✕</button>
+    </div>
+    <div id="members-modal-body">
+      <div class="wall-empty">Loading…</div>
+    </div>
+    <div style="margin-top:1.5rem">
+      <button class="btn btn-outline" onclick="closeMembersModal()" style="width:100%">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD COMMITMENT TO WALL MODAL -->
+<div class="modal-overlay" id="add-commit-modal" onclick="if(event.target===this)closeAddCommitModal()">
+  <div class="modal" style="max-width:540px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+      <div class="modal-title" style="margin:0">Add Commitment to Wall</div>
+      <button onclick="closeAddCommitModal()" style="background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;padding:0.25rem">✕</button>
+    </div>
+    <div id="add-commit-modal-body">
+      <div class="wall-empty">Loading…</div>
+    </div>
+    <div style="margin-top:1.5rem">
+      <button class="btn btn-outline" onclick="closeAddCommitModal()" style="width:100%">Close</button>
     </div>
   </div>
 </div>
