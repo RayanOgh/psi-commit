@@ -50,7 +50,7 @@ class Database:
             client.table("commitments")
             .select(
                 "id, mac, nonce, context, domain, committed_at, visibility, "
-                "revealed, revealed_message, ots_status, bitcoin_block, ots_confirmed_at, "
+                "revealed, revealed_message, revealed_key, ots_status, bitcoin_block, ots_confirmed_at, "
                 "user_id, profiles(username, avatar_url, avatar_seed)"
             )
             .eq("visibility", "public")
@@ -74,7 +74,7 @@ class Database:
             client.table("commitments")
             .select(
                 "id, mac, nonce, context, domain, committed_at, visibility, "
-                "revealed, revealed_message, ots_status, bitcoin_block, ots_confirmed_at"
+                "revealed, revealed_message, revealed_key, ots_status, bitcoin_block, ots_confirmed_at"
             )
             .eq("user_id", user_id)
             .order("committed_at", desc=True)
@@ -102,12 +102,13 @@ class Database:
             update["bitcoin_block"] = bitcoin_block
         client.table("commitments").update(update).eq("id", commitment_id).execute()
 
-    async def reveal_commitment(self, commitment_id: str, message: str):
-        """Store the revealed message after verification."""
+    async def reveal_commitment(self, commitment_id: str, message: str, key_hex: str):
+        """Store the revealed message and key after verification."""
         client = get_client()
         client.table("commitments").update({
             "revealed": True,
             "revealed_message": message,
+            "revealed_key": key_hex,
             "revealed_at": "now()"
         }).eq("id", commitment_id).execute()
 
