@@ -4,7 +4,7 @@ FastAPI backend for the psi-commit web app.
 Handles: wall persistence, OTS Bitcoin anchoring, verification.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -206,6 +206,21 @@ async def reveal_commitment(commitment_id: str, data: RevealPost):
         "message": "Commitment revealed and verified."
     }
 
+
+
+
+@app.delete("/api/commitment/{commitment_id}")
+async def delete_commitment(commitment_id: str, request: Request):
+    user_id = request.headers.get('x-user-id')
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    commitment = await db.get_commitment(commitment_id)
+    if not commitment:
+        raise HTTPException(status_code=404, detail="Not found")
+    if commitment.get('user_id') != user_id:
+        raise HTTPException(status_code=403, detail="Not your commitment")
+    await db.delete_commitment(commitment_id)
+    return {"success": True}
 
 @app.get("/api/health")
 async def health():
