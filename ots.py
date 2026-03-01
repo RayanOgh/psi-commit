@@ -26,11 +26,16 @@ def sha256(data: bytes) -> bytes:
     return hashlib.sha256(data).digest()
 
 
+def _deserialize_ots(ots_bytes: bytes):
+    """Deserialize .ots bytes using the correct opentimestamps context."""
+    from opentimestamps.core.timestamp import DetachedTimestampFile
+    from opentimestamps.core.serialize import StreamDeserializationContext
+    ctx = StreamDeserializationContext(ots_bytes)
+    return DetachedTimestampFile.deserialize(ctx)
+
+
 def build_stamp_file(commitment_id: str, mac_hex: str, timestamp: str) -> str:
-    """
-    Build the stamp file text — identical to what the browser generates.
-    This is what gets SHA256'd and submitted to OTS.
-    """
+    """Build the stamp file text — identical to what the browser generates."""
     return "\n".join([
         "PSI-COMMIT STAMP",
         f"id: {commitment_id}",
@@ -61,11 +66,11 @@ def build_detached_ots_file(digest: bytes, calendar_receipt_body: bytes, calenda
     Format: magic(31) + version(1) + hash_op(1) + digest(32, raw) + timestamp_operations
     """
     out = io.BytesIO()
-    out.write(OTS_MAGIC)       # 31 bytes
-    out.write(OTS_VERSION)     # 1 byte
-    out.write(OP_SHA256)       # 1 byte
-    assert len(digest) == 32, f"Digest must be 32 bytes, got {len(digest)}"
-    out.write(digest)          # 32 bytes
+    out.write(OTS_MAGIC)
+    out.write(OTS_VERSION)
+    out.write(OP_SHA256)
+    assert len(digest) == 32
+    out.write(digest)
     out.write(calendar_receipt_body)
     return out.getvalue()
 
@@ -130,18 +135,13 @@ async def submit_to_calendar(calendar_url: str, digest: bytes) -> Optional[bytes
 def find_pending_attestations(ots_file_bytes: bytes) -> List[Dict]:
     """
     Parse a .ots file and find PendingAttestations with their commitment hashes.
-
-    KEY INSIGHT: The calendar transforms our original digest via merkle ops.
-    The PendingAttestation node's .msg is the TRANSFORMED hash — that's what
-    we need to query /timestamp/{hash} with, NOT the original digest.
+    The commitment hash at the PendingAttestation node is the TRANSFORMED hash
+    that the calendar knows — NOT the original digest.
     """
     try:
-        from opentimestamps.core.timestamp import DetachedTimestampFile
         from opentimestamps.core.notary import PendingAttestation
 
-        ctx = io.BytesIO(ots_file_bytes)
-        detached = DetachedTimestampFile.deserialize(ctx)
-
+        detached = _deserialize_ots(ots_file_bytes)
         results = []
 
         def walk(timestamp):
@@ -164,19 +164,18 @@ def find_pending_attestations(ots_file_bytes: bytes) -> List[Dict]:
 
 async def upgrade_ots_file(ots_file_bytes: bytes) -> tuple:
     """
-    Attempt to upgrade a .ots file by querying calendars for confirmed proofs.
-    Uses the opentimestamps library to parse, upgrade, and re-serialize.
+    Upgrade a .ots file by querying calendars for confirmed proofs.
+    Uses the library to parse, find PendingAttestations, query the correct
+    calendar endpoint with the TRANSFORMED hash, and merge the result.
 
     Returns (upgraded_bytes, block_number) or (None, None).
     """
     try:
-        from opentimestamps.core.timestamp import DetachedTimestampFile, Timestamp
+        from opentimestamps.core.timestamp import Timestamp
         from opentimestamps.core.notary import PendingAttestation, BitcoinBlockHeaderAttestation
-        from opentimestamps.core.serialize import BytesDeserializationContext
+        from opentimestamps.core.serialize import BytesDeserializationContext, StreamSerializationContext
 
-        ctx = io.BytesIO(ots_file_bytes)
-        detached = DetachedTimestampFile.deserialize(ctx)
-
+        detached = _deserialize_ots(ots_file_bytes)
         upgraded = False
 
         async def try_upgrade(timestamp):
@@ -201,11 +200,9 @@ async def upgrade_ots_file(ots_file_bytes: bytes) -> tuple:
                             if response.status_code == 200 and response.content:
                                 print(f"[OTS] Got upgrade from {calendar_url}: {len(response.content)} bytes")
 
-                                # Deserialize the calendar's response as a Timestamp
                                 upgrade_ctx = BytesDeserializationContext(response.content)
                                 new_timestamp = Timestamp.deserialize(upgrade_ctx, timestamp.msg)
 
-                                # Merge the upgraded timestamp into our tree
                                 timestamp.merge(new_timestamp)
                                 pending_to_remove.append(attestation)
                                 upgraded = True
@@ -225,9 +222,9 @@ async def upgrade_ots_file(ots_file_bytes: bytes) -> tuple:
         await try_upgrade(detached.timestamp)
 
         if upgraded:
-            # Re-serialize
             out = io.BytesIO()
-            detached.serialize(out)
+            ctx = StreamSerializationContext(out)
+            detached.serialize(ctx)
             upgraded_bytes = out.getvalue()
 
             block_num = _find_block_in_timestamp(detached.timestamp)
@@ -259,10 +256,7 @@ def _find_block_in_timestamp(timestamp) -> Optional[int]:
 
 
 async def check_ots_status(commitment_id: str, mac_hex: str, ots_receipt_hex: str, ots_digest: str = None, timestamp: str = '') -> dict:
-    """
-    Check if an OTS receipt has been confirmed in Bitcoin.
-    Properly parses the .ots file and queries the right calendar endpoint.
-    """
+    """Check if an OTS receipt has been confirmed in Bitcoin."""
     try:
         ots_bytes = bytes.fromhex(ots_receipt_hex) if isinstance(ots_receipt_hex, str) else ots_receipt_hex
 
@@ -284,7 +278,6 @@ async def check_ots_status(commitment_id: str, mac_hex: str, ots_receipt_hex: st
             return {"status": "confirmed", "bitcoin_block": block_num}
 
         if upgraded_bytes:
-            # Intermediate upgrade (no block yet)
             await db.update_ots(
                 commitment_id=commitment_id,
                 ots_receipt=upgraded_bytes,
@@ -303,11 +296,7 @@ async def check_ots_status(commitment_id: str, mac_hex: str, ots_receipt_hex: st
 def parse_bitcoin_block(ots_file_bytes: bytes) -> Optional[int]:
     """Extract Bitcoin block number from a complete .ots file."""
     try:
-        from opentimestamps.core.timestamp import DetachedTimestampFile
-
-        ctx = io.BytesIO(ots_file_bytes)
-        detached = DetachedTimestampFile.deserialize(ctx)
-
+        detached = _deserialize_ots(ots_file_bytes)
         block = _find_block_in_timestamp(detached.timestamp)
         if block:
             print(f"[OTS] Bitcoin block #{block}")
