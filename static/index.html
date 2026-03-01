@@ -2624,17 +2624,27 @@ function escapeHtml(str) {
 // ── INIT ──
 document.addEventListener('DOMContentLoaded', async () => {
 
-  // onAuthStateChange fires immediately with current session AND after Google redirect
+  // First check for existing persisted session
+  const { data: { session: existingSession } } = await sb.auth.getSession();
+  if (existingSession?.user) {
+    currentUser = existingSession.user;
+    await ensureProfile(existingSession.user);
+    updateAuthUI(existingSession.user);
+  }
+
+  // Then listen for auth changes (Google redirect, sign out, etc)
   sb.auth.onAuthStateChange(async (event, session) => {
     console.log('[AUTH] event:', event, 'user:', session?.user?.email);
-    if (session?.user) {
-      currentUser = session.user;
-      await ensureProfile(session.user);
-      updateAuthUI(session.user);
-    } else {
+    if (event === 'SIGNED_OUT') {
       currentUser = null;
       currentProfile = null;
       updateAuthUI(null);
+      return;
+    }
+    if (session?.user && session.user.id !== currentUser?.id) {
+      currentUser = session.user;
+      await ensureProfile(session.user);
+      updateAuthUI(session.user);
     }
   });
 
