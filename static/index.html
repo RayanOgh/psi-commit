@@ -1300,7 +1300,7 @@
   <div class="hero-grid"></div>
   <div class="hero-tag">Cryptographic Commitment Scheme</div>
   <h1>PROVE<span>YOU SAID<span class="cursor"></span></span>IT FIRST.</h1>
-  <p class="hero-sub">Commit to any prediction, hypothesis, or decision before the outcome — then reveal it later with mathematical proof you didn't cheat. No blockchain. No trust required.</p>
+  <p class="hero-sub">Commit to any prediction, hypothesis, or decision before the outcome — then reveal it later with mathematical proof you didn't cheat. Bitcoin-anchored. No trust required.</p>
   <div class="hero-actions">
     <a href="#app" class="btn btn-primary">Make a Commitment →</a>
     <a href="#how" class="btn btn-outline">How it works</a>
@@ -2776,30 +2776,32 @@ async function deleteCommitment(commitmentId) {
   if (!confirm('Delete this commitment? It will be removed from your profile and the wall.')) return;
 
   try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.access_token) {
+      alert('Please sign in to delete commitments.');
+      return;
+    }
+
     const res = await fetch(`${API_BASE}/api/commitment/${commitmentId}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id || '' }
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      }
     });
 
     if (res.ok) {
-      // Reload current view
       if (document.getElementById('profile-page').classList.contains('active')) {
         await loadProfileData(viewingUserId);
       } else {
         renderWall();
       }
     } else {
-      // Fallback: delete directly via Supabase if user owns it
-      await sb.from('commitments').delete().eq('id', commitmentId).eq('user_id', currentUser.id);
-      if (document.getElementById('profile-page').classList.contains('active')) {
-        await loadProfileData(viewingUserId);
-      } else {
-        renderWall();
-      }
+      const err = await res.json();
+      alert(err.detail || 'Failed to delete commitment');
     }
   } catch(e) {
-    await sb.from('commitments').delete().eq('id', commitmentId).eq('user_id', currentUser.id);
-    await loadProfileData(viewingUserId);
+    alert('Error deleting commitment');
   }
 }
 
