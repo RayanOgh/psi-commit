@@ -541,11 +541,29 @@ async def download_ots(commitment_id: str):
     )
 
 
+async def get_authenticated_user(request: Request) -> str:
+    """Verify Supabase JWT and return user_id. Raises 401 if invalid."""
+    auth_header = request.headers.get('authorization', '')
+    if not auth_header.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    token = auth_header[7:]
+    try:
+        client = get_client()
+        user_response = client.auth.get_user(token)
+        if not user_response or not user_response.user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user_response.user.id
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[AUTH] Token verification failed: {e}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
+
 @app.delete("/api/commitment/{commitment_id}")
 async def delete_commitment(commitment_id: str, request: Request):
-    user_id = request.headers.get('x-user-id')
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+    user_id = await get_authenticated_user(request)
     commitment = await db.get_commitment(commitment_id)
     if not commitment:
         raise HTTPException(status_code=404, detail="Not found")
