@@ -59,7 +59,7 @@
 
 ## Reporting Vulnerabilities
 
-Please report security issues to: [your-email@example.com]
+Please report security issues to: [rayanoghabian@gmail.com]
 
 ## References
 
