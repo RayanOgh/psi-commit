@@ -1982,7 +1982,7 @@ async function renderLinkedAccountsManager() {
   const identities = currentUser.identities || [];
   const linkedProviders = identities.map(i => i.provider).filter(p => p !== 'email');
   const allProviders = ['google', 'github', 'discord'];
-  const canUnlink = linkedProviders.length > 1;
+  const isLastProvider = linkedProviders.length === 1;
 
   let html = '';
 
@@ -2002,10 +2002,7 @@ async function renderLinkedAccountsManager() {
           <span>${meta.label}</span>
           ${displayName}
         </div>
-        ${canUnlink
-          ? `<button class="btn-unlink" onclick="unlinkProvider('${identity.id}', '${identity.provider}')">Unlink</button>`
-          : `<span style="font-family:var(--mono);font-size:0.6rem;color:var(--muted)">only account</span>`
-        }
+        <button class="btn-unlink" onclick="unlinkProvider('${identity.id}', '${identity.provider}', ${isLastProvider})">Unlink</button>
       </div>`;
   }
 
@@ -2032,8 +2029,12 @@ async function linkProvider(provider) {
   if (error) alert('Error linking ' + provider + ': ' + error.message);
 }
 
-async function unlinkProvider(identityId, providerName) {
-  if (!confirm(`Unlink ${PROVIDER_META[providerName]?.label || providerName}? You can re-link it later.`)) return;
+async function unlinkProvider(identityId, providerName, isLast = false) {
+  const label = PROVIDER_META[providerName]?.label || providerName;
+  const warning = isLast
+    ? `This is your only linked account. Unlinking ${label} may lock you out unless you have email/password login. Are you sure?`
+    : `Unlink ${label}? You can re-link it later.`;
+  if (!confirm(warning)) return;
   const identity = (currentUser.identities || []).find(i => i.id === identityId);
   if (!identity) { alert('Identity not found.'); return; }
   const { error } = await sb.auth.unlinkIdentity(identity);
