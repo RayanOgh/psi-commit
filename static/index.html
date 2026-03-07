@@ -2698,19 +2698,13 @@ async function buildStampDigest(commitment) {
 
 function downloadPSCOnly() {
   if (!currentCommitment) return;
-  const defaultName = currentCommitment.id.replace('psc_', '');
-  const name = prompt('Name your .psc file:', defaultName);
-  if (name === null) return;
-  const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
+  const filename = currentCommitment.id.replace('psc_', '');
   downloadPSCFile(filename);
 }
 
 function downloadStampOnly() {
   if (!currentCommitment) return;
-  const defaultName = currentCommitment.id.replace('psc_', '');
-  const name = prompt('Name your .stamp.txt file:', defaultName);
-  if (name === null) return;
-  const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
+  const filename = currentCommitment.id.replace('psc_', '');
   downloadStampFile(filename);
 }
 
@@ -2748,10 +2742,7 @@ function exportOTS(commitment = null) {
     return;
   }
 
-  const defaultName = c.id || 'commitment';
-  const name = prompt('Name your .ots file:', defaultName.replace('psc_', ''));
-  if (name === null) return;
-  const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
+  const filename = (c.id || 'commitment').replace('psc_', '');
 
   // Convert hex to binary
   const bytes = new Uint8Array(otsHex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
