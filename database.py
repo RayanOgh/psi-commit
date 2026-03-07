@@ -42,7 +42,7 @@ class Database:
 
     async def get_wall(self, limit: int = 50, offset: int = 0) -> List[dict]:
         """
-        Fetch PUBLIC wall commitments only, newest first.
+        Fetch wall commitments only (on_wall=true), newest first.
         Never returns secret keys or unrevealed messages.
         """
         client = get_client()
@@ -53,7 +53,7 @@ class Database:
                 "revealed, revealed_message, revealed_key, ots_status, bitcoin_block, ots_confirmed_at, "
                 "user_id, profiles(username, avatar_url, avatar_seed)"
             )
-            .eq("visibility", "public")
+            .eq("on_wall", True)
             .order("committed_at", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
