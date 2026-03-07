@@ -1611,7 +1611,8 @@
         </div>
         <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="downloadMessage()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:#ff6b6b;border-color:#ff6b6b" id="copy-msg-btn">↓ Save Message (.txt)</button>
-          <button class="btn btn-primary" onclick="downloadPSC()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download Files (.psc + .stamp.txt)</button>
+          <button class="btn btn-primary" onclick="downloadPSCOnly()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download .psc</button>
+          <button class="btn btn-primary" onclick="downloadStampOnly()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:var(--accent2);border-color:var(--accent2);color:var(--black)">↓ Download .stamp.txt</button>
           <button class="btn btn-outline" onclick="exportOTS()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="export-ots-btn">↓ Export .ots File</button>
           <button class="btn btn-outline" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Text</button>
           <button class="btn btn-outline" onclick="addToWall()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="add-wall-btn">+ Add to Wall</button>
@@ -1992,7 +1993,25 @@ async function syncLinkedProviders() {
         url: meta?.getUrl?.(data) || null
       };
     });
-  await sb.from('profiles').update({ linked_providers: providers }).eq('id', currentUser.id);
+  const { error } = await sb.from('profiles').update({ linked_providers: providers }).eq('id', currentUser.id);
+  if (error) {
+    if (error.message?.includes('already linked to another user')) {
+      // Extract provider name from error message if possible
+      const match = error.message.match(/: (\w+) \//);
+      const providerLabel = match ? (PROVIDER_META[match[1]]?.label || match[1]) : 'That account';
+      alert(`${providerLabel} is already linked to a different PSI-COMMIT account. Please unlink it from the other account first.`);
+      // Unlink the conflicting identity from Supabase auth
+      const conflictIdentity = identities.find(i => i.provider === match?.[1]);
+      if (conflictIdentity) {
+        await sb.auth.unlinkIdentity(conflictIdentity);
+        const { data: { user } } = await sb.auth.getUser();
+        if (user) currentUser = user;
+      }
+      return null;
+    }
+    console.error('syncLinkedProviders error:', error);
+    return null;
+  }
   return providers;
 }
 
@@ -2607,8 +2626,8 @@ async function createCommitment() {
     } catch(e) {}
   }, 3000);
 
-  // Auto-download .psc receipt
-  promptAndDownloadPSC();
+  // Auto-download .psc receipt (single file — iOS only allows one download per gesture)
+  downloadPSCOnly();
 }
 
 // ── COPY / DOWNLOAD ──
@@ -2677,23 +2696,22 @@ async function buildStampDigest(commitment) {
   return await sha256Hex(buildStampFile(commitment));
 }
 
-function promptAndDownloadFiles() {
+function downloadPSCOnly() {
   if (!currentCommitment) return;
   const defaultName = currentCommitment.id.replace('psc_', '');
-  const name = prompt('Name your files (both .psc and .stamp.txt will use this name):', defaultName);
+  const name = prompt('Name your .psc file:', defaultName);
   if (name === null) return;
   const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
   downloadPSCFile(filename);
+}
+
+function downloadStampOnly() {
+  if (!currentCommitment) return;
+  const defaultName = currentCommitment.id.replace('psc_', '');
+  const name = prompt('Name your .stamp.txt file:', defaultName);
+  if (name === null) return;
+  const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
   downloadStampFile(filename);
-}
-
-function promptAndDownloadPSC() {
-  // Called automatically after commit — downloads both files
-  promptAndDownloadFiles();
-}
-
-function downloadPSC() {
-  promptAndDownloadFiles();
 }
 
 function triggerDownload(filename, content, mimeType = 'text/plain') {
