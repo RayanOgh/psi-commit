@@ -2626,8 +2626,9 @@ async function createCommitment() {
     } catch(e) {}
   }, 3000);
 
-  // Auto-download .psc receipt (single file — iOS only allows one download per gesture)
-  downloadPSCOnly();
+  // Auto-download .psc on desktop — iOS blocks programmatic downloads, users tap buttons manually
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  if (!isIOS) downloadPSCOnly();
 }
 
 // ── COPY / DOWNLOAD ──
