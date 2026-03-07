@@ -1596,7 +1596,7 @@
           <button class="vis-btn active" id="vis-public" onclick="setVisibility('public')">🌐 Public</button>
           <button class="vis-btn" id="vis-private" onclick="setVisibility('private')">🔒 Private</button>
         </div>
-        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.5rem" id="vis-desc">Public commitments appear on your profile and the wall.</div>
+        <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.5rem" id="vis-desc">Public commitments appear on your profile. Use "Add to Wall" to show on the global wall.</div>
       </div>
       <button class="btn btn-primary" onclick="createCommitment()">Generate Commitment →</button>
 
@@ -2486,7 +2486,7 @@ function setVisibility(v) {
   document.getElementById('vis-public').classList.toggle('active', v === 'public');
   document.getElementById('vis-private').classList.toggle('active', v === 'private');
   document.getElementById('vis-desc').textContent = v === 'public'
-    ? 'Public commitments appear on your profile and the wall.'
+    ? 'Public commitments appear on your profile. Use "Add to Wall" to show on the global wall.'
     : 'Private commitments are only visible to you on your profile.';
   const wallBtn = document.getElementById('add-wall-btn');
   if (wallBtn) wallBtn.style.display = v === 'public' ? 'inline-flex' : 'none';
@@ -2893,6 +2893,31 @@ async function verifyCommitment() {
 }
 
 // ── WALL ──
+async function addExistingToWall(commitmentId, btn) {
+  if (!currentUser) { openModal(); return; }
+  const orig = btn.textContent;
+  btn.textContent = 'Adding...';
+  btn.disabled = true;
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(`${API_BASE}/api/wall/add/${commitmentId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`
+      }
+    });
+    if (!res.ok) throw new Error();
+    btn.textContent = '✓ On Wall';
+    btn.style.color = 'var(--muted)';
+    btn.style.borderColor = 'var(--border)';
+    btn.disabled = true;
+  } catch(e) {
+    btn.textContent = 'Error';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+  }
+}
+
 async function addToWall() {
   if (!currentCommitment) return;
   if (!currentUser) { openModal(); return; }
@@ -2903,23 +2928,18 @@ async function addToWall() {
   btn.disabled = true;
 
   try {
-    const res = await fetch(`${API_BASE}/api/commit`, {
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch(`${API_BASE}/api/wall/add/${currentCommitment.id}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: currentCommitment.id,
-        mac: currentCommitment.mac,
-        nonce: currentCommitment.nonce,
-        context: currentCommitment.context,
-        domain: currentCommitment.domain,
-        timestamp: currentCommitment.timestamp,
-        user_id: currentUser.id,
-        visibility: currentCommitment.visibility
-      })
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token}`
+      }
     });
     if (!res.ok) throw new Error();
-    btn.textContent = '✓ Added!';
-    setTimeout(() => { switchTab('wall'); renderWall(); }, 600);
+    btn.textContent = '✓ On the Wall!';
+    btn.disabled = true;
+    setTimeout(() => { switchTab('wall'); renderWall(); }, 800);
   } catch(e) {
     btn.textContent = 'Error — try again';
     setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
@@ -2979,6 +2999,8 @@ function buildWallItem(item, isOwner = false) {
       <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap">
         ${!revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem" onclick="revealItem('${item.id}')">Reveal</button>` : ''}
         ${revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2);border-color:var(--accent2)" onclick="openComments('${item.id}')">💬 Comments</button>` : ''}
+        ${isOwner && item.visibility === 'public' && !item.on_wall ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent)" onclick="addExistingToWall('${item.id}', this)">+ Add to Wall</button>` : ''}
+        ${isOwner && item.on_wall ? `<span style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);padding:0.4rem 0.5rem">✓ On Wall</span>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="downloadCommitmentPSC('${item.id}')">↓ .psc</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="downloadCommitmentStamp('${item.id}', '${item.mac}', '${item.committed_at || item.timestamp}')">↓ .stamp.txt</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="exportCommitmentOTS('${item.id}')">↓ .ots</button>` : ''}
