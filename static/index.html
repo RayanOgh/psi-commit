@@ -1368,6 +1368,17 @@
   </div>
 </div>
 
+<!-- FOLLOW LIST MODAL -->
+<div class="modal-overlay" id="follow-modal">
+  <div class="modal" style="max-width:420px;max-height:80vh;overflow-y:auto">
+    <button class="modal-close" onclick="document.getElementById('follow-modal').classList.remove('open')">✕</button>
+    <div class="modal-title" style="font-size:1.4rem;margin-bottom:1.5rem" id="follow-modal-title">Followers</div>
+    <div id="follow-modal-list">
+      <div style="font-family:var(--mono);font-size:0.75rem;color:var(--muted);text-align:center;padding:2rem">Loading...</div>
+    </div>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav>
   <a class="nav-logo" href="#" onclick="showMainPage()">PSI — COMMIT</a>
@@ -1419,13 +1430,13 @@
           <div class="profile-stat-val" id="stat-private" style="color:var(--muted)">0</div>
           <div class="profile-stat-label" style="color:#333">Private</div>
         </div>
-        <div class="profile-stat">
+        <div class="profile-stat" style="cursor:pointer" onclick="openFollowModal('followers')">
           <div class="profile-stat-val" id="stat-followers">0</div>
-          <div class="profile-stat-label">Followers</div>
+          <div class="profile-stat-label" style="text-decoration:underline;text-underline-offset:3px">Followers</div>
         </div>
-        <div class="profile-stat">
+        <div class="profile-stat" style="cursor:pointer" onclick="openFollowModal('following')">
           <div class="profile-stat-val" id="stat-following">0</div>
-          <div class="profile-stat-label">Following</div>
+          <div class="profile-stat-label" style="text-decoration:underline;text-underline-offset:3px">Following</div>
         </div>
       </div>
     </div>
@@ -1599,7 +1610,7 @@
           ⚠ SAVE YOUR MESSAGE SEPARATELY. It is NOT stored in your receipt file and cannot be recovered. Copy it now.
         </div>
         <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="copyMessage()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:#ff6b6b;border-color:#ff6b6b" id="copy-msg-btn">📋 Copy Message</button>
+          <button class="btn btn-primary" onclick="downloadMessage()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:#ff6b6b;border-color:#ff6b6b" id="copy-msg-btn">↓ Save Message (.txt)</button>
           <button class="btn btn-primary" onclick="downloadPSC()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download Files (.psc + .stamp.txt)</button>
           <button class="btn btn-outline" onclick="exportOTS()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="export-ots-btn">↓ Export .ots File</button>
           <button class="btn btn-outline" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Text</button>
@@ -1986,10 +1997,20 @@ async function syncLinkedProviders() {
 }
 
 // Render clickable provider badges on any profile (reads from profiles table)
-function renderProviderBadges(providers) {
+function renderProviderBadges(providers, isOwnProfile = false) {
   const el = document.getElementById('profile-linked-providers');
   if (!el) return;
-  if (!providers || providers.length === 0) { el.innerHTML = ''; return; }
+  if (!providers || providers.length === 0) {
+    if (isOwnProfile) {
+      el.innerHTML = `<div style="font-family:var(--mono);font-size:0.68rem;color:var(--muted);margin-top:0.25rem">
+        No linked accounts. 
+        <a onclick="openEditProfile()" style="color:var(--accent);cursor:pointer;text-decoration:underline">Link your GitHub or Discord →</a>
+      </div>`;
+    } else {
+      el.innerHTML = '';
+    }
+    return;
+  }
   el.innerHTML = providers.map(p => {
     const meta = PROVIDER_META[p.provider];
     if (!meta) return '';
@@ -2091,6 +2112,9 @@ function closeModal() {
 // Close modal on overlay click
 document.getElementById('auth-modal').addEventListener('click', function(e) {
   if (e.target === this) closeModal();
+});
+document.getElementById('follow-modal').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('open');
 });
 
 // ── PROFILE CREATION ──
@@ -2286,7 +2310,7 @@ async function loadProfileData(userId = null) {
   if (bioEl) bioEl.textContent = profile.bio || '';
 
   // Show linked provider badges (from profiles table)
-  renderProviderBadges(profile.linked_providers || []);
+  renderProviderBadges(profile.linked_providers || [], isOwnProfile);
 
   // Show/hide edit button
   const editWrap = document.getElementById('edit-profile-btn-wrap');
@@ -2348,6 +2372,60 @@ async function loadProfileData(userId = null) {
 }
 
 // ── FOLLOW / UNFOLLOW ──
+async function openFollowModal(type) {
+  const targetId = viewingUserId || currentUser?.id;
+  if (!targetId) return;
+
+  const modal = document.getElementById('follow-modal');
+  const title = document.getElementById('follow-modal-title');
+  const list = document.getElementById('follow-modal-list');
+
+  title.textContent = type === 'followers' ? 'Followers' : 'Following';
+  list.innerHTML = '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--muted);text-align:center;padding:2rem">Loading...</div>';
+  modal.classList.add('open');
+
+  let userIds = [];
+
+  if (type === 'followers') {
+    const { data } = await sb.from('follows').select('follower_id').eq('following_id', targetId);
+    userIds = (data || []).map(r => r.follower_id);
+  } else {
+    const { data } = await sb.from('follows').select('following_id').eq('follower_id', targetId);
+    userIds = (data || []).map(r => r.following_id);
+  }
+
+  if (!userIds.length) {
+    list.innerHTML = `<div style="font-family:var(--mono);font-size:0.75rem;color:var(--muted);text-align:center;padding:2rem">No ${type} yet.</div>`;
+    return;
+  }
+
+  const { data: profiles } = await sb
+    .from('profiles')
+    .select('id, username, full_name, avatar_url, avatar_seed, public_commits_count')
+    .in('id', userIds);
+
+  if (!profiles?.length) {
+    list.innerHTML = `<div style="font-family:var(--mono);font-size:0.75rem;color:var(--muted);text-align:center;padding:2rem">No ${type} yet.</div>`;
+    return;
+  }
+
+  list.innerHTML = profiles.map(u => {
+    const av = sanitizeAvatarUrl(u.avatar_url) || getAvatarUrl(u.avatar_seed || u.id);
+    return `<div class="search-result-item" onclick="closeFollowModalAndOpenProfile('${u.id}')">
+      <img class="search-result-avatar" src="${av}" alt="">
+      <div>
+        <div class="search-result-name">${escapeHtml(u.full_name || u.username)}</div>
+        <div class="search-result-handle">@${escapeHtml(u.username)} · ${u.public_commits_count || 0} commits</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function closeFollowModalAndOpenProfile(userId) {
+  document.getElementById('follow-modal').classList.remove('open');
+  showProfile(userId);
+}
+
 async function followUser(targetId) {
   if (!currentUser) { openModal(); return; }
 
@@ -2544,16 +2622,17 @@ function copyCard() {
   });
 }
 
-function copyMessage() {
+function downloadMessage() {
   if (!currentCommitment || !currentCommitment.message) return;
-  navigator.clipboard.writeText(currentCommitment.message).then(() => {
-    const btn = document.getElementById('copy-msg-btn');
-    const orig = btn.textContent;
-    btn.textContent = '✓ Message Copied!';
-    btn.style.background = 'var(--accent2)';
-    btn.style.borderColor = 'var(--accent2)';
-    setTimeout(() => { btn.textContent = orig; btn.style.background = '#ff6b6b'; btn.style.borderColor = '#ff6b6b'; }, 2000);
-  });
+  const filename = (currentCommitment.id || 'commitment').replace('psc_', '');
+  const text = `PSI-COMMIT MESSAGE\n${'─'.repeat(48)}\nID: ${currentCommitment.id}\nDate: ${new Date(currentCommitment.timestamp).toLocaleString()}\n${'─'.repeat(48)}\n\n${currentCommitment.message}\n\n${'─'.repeat(48)}\nKeep this file private until you are ready to reveal.\npsicommit.com`;
+  triggerDownload(filename + '.message.txt', text);
+  const btn = document.getElementById('copy-msg-btn');
+  const orig = btn.textContent;
+  btn.textContent = '✓ Saved!';
+  btn.style.background = 'var(--accent2)';
+  btn.style.borderColor = 'var(--accent2)';
+  setTimeout(() => { btn.textContent = orig; btn.style.background = '#ff6b6b'; btn.style.borderColor = '#ff6b6b'; }, 2000);
 }
 
 function buildStampFile(commitment) {
@@ -2617,29 +2696,28 @@ function downloadPSC() {
   promptAndDownloadFiles();
 }
 
-function downloadPSCFile(filename) {
-  const data = buildPSCData(currentCommitment);
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
+function triggerDownload(filename, content, mimeType = 'text/plain') {
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename + '.psc';
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+}
+
+function downloadPSCFile(filename) {
+  const data = buildPSCData(currentCommitment);
+  const json = JSON.stringify(data, null, 2);
+  triggerDownload(filename + '.psc', json);
 }
 
 function downloadStampFile(filename, commitment = null) {
   const c = commitment || currentCommitment;
   if (!c) return;
-  const text = buildStampFile(c);
-  const blob = new Blob([text], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename + '.stamp.txt';
-  a.click();
-  URL.revokeObjectURL(url);
+  triggerDownload(filename + '.stamp.txt', buildStampFile(c));
 }
 
 function exportOTS(commitment = null) {
@@ -2652,21 +2730,22 @@ function exportOTS(commitment = null) {
     return;
   }
 
-  // Convert hex to binary
-  const bytes = new Uint8Array(otsHex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
-  const blob = new Blob([bytes], { type: 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-
   const defaultName = c.id || 'commitment';
   const name = prompt('Name your .ots file:', defaultName.replace('psc_', ''));
   if (name === null) return;
   const filename = (name.trim() || defaultName).replace(/[^a-z0-9_\-]/gi, '_');
 
+  // Convert hex to binary
+  const bytes = new Uint8Array(otsHex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+  const blob = new Blob([bytes], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename + '.ots';
+  a.style.display = 'none';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
 }
 
 async function downloadCommitmentPSC(commitmentId) {
@@ -2698,14 +2777,7 @@ async function downloadCommitmentPSC(commitmentId) {
     created_by: 'psicommit.com'
   };
 
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = c.id + '.psc';
-  a.click();
-  URL.revokeObjectURL(url);
+  triggerDownload(c.id + '.psc', JSON.stringify(data, null, 2));
 }
 
 function downloadCommitmentStamp(commitmentId, mac, timestamp) {
@@ -2716,13 +2788,7 @@ function downloadCommitmentStamp(commitmentId, mac, timestamp) {
     `timestamp: ${timestamp}`,
     `site: psicommit.com`,
   ].join('\n');
-  const blob = new Blob([stampText], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = commitmentId + '.stamp.txt';
-  a.click();
-  URL.revokeObjectURL(url);
+  triggerDownload(commitmentId + '.stamp.txt', stampText);
 }
 
 async function exportCommitmentOTS(commitmentId) {
