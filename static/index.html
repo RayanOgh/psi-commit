@@ -1886,6 +1886,33 @@ function getAvatarUrl(seed) {
   return `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${encodeURIComponent(seed)}&backgroundColor=0a0a0a`;
 }
 
+// ── SANITIZATION ──
+function sanitizeText(str) {
+  if (!str) return '';
+  // Strip all HTML tags and trim
+  return str.replace(/<[^>]*>/g, '').replace(/[<>"'`]/g, '').trim().slice(0, 500);
+}
+
+const TRUSTED_AVATAR_DOMAINS = [
+  'avatars.githubusercontent.com',
+  'lh3.googleusercontent.com',
+  'cdn.discordapp.com',
+  'api.dicebear.com',
+  'secure.gravatar.com',
+];
+
+function sanitizeAvatarUrl(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return null;
+    if (!TRUSTED_AVATAR_DOMAINS.some(d => parsed.hostname === d || parsed.hostname.endsWith('.' + d))) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
 // ── AUTH ──
 async function signInWithGoogle() {
   const { error } = await sb.auth.signInWithOAuth({
@@ -2117,8 +2144,8 @@ async function submitUsername() {
   }
 
   // Create profile
-  const name = user.user_metadata?.full_name || username;
-  const avatarUrl = user.user_metadata?.avatar_url || getAvatarUrl(user.id);
+  const name = sanitizeText(user.user_metadata?.full_name || username);
+  const avatarUrl = sanitizeAvatarUrl(user.user_metadata?.avatar_url) || getAvatarUrl(user.id);
 
   const { data: profile, error } = await sb
     .from('profiles')
@@ -2180,7 +2207,7 @@ function updateAuthUI(user) {
     btnLogin.style.display = 'none';
     navUser.style.display = 'flex';
 
-    const avatarUrl = currentProfile.avatar_url || getAvatarUrl(currentProfile.avatar_seed || user.id);
+    const avatarUrl = sanitizeAvatarUrl(currentProfile.avatar_url) || getAvatarUrl(currentProfile.avatar_seed || user.id);
     document.getElementById('nav-avatar').src = avatarUrl;
     document.getElementById('nav-username').textContent = '@' + currentProfile.username;
 
@@ -2247,10 +2274,10 @@ async function loadProfileData(userId = null) {
   // Show/hide private tab
   document.querySelector('[onclick*="private"]').style.display = isOwnProfile ? 'block' : 'none';
 
-  const avatarUrl = profile.avatar_url || getAvatarUrl(profile.avatar_seed || targetId);
+  const avatarUrl = sanitizeAvatarUrl(profile.avatar_url) || getAvatarUrl(profile.avatar_seed || targetId);
   document.getElementById('profile-avatar').src = avatarUrl;
-  document.getElementById('profile-name').textContent = profile.full_name || profile.username;
-  document.getElementById('profile-handle').textContent = '@' + profile.username;
+  document.getElementById('profile-name').textContent = sanitizeText(profile.full_name || profile.username);
+  document.getElementById('profile-handle').textContent = '@' + sanitizeText(profile.username);
   document.getElementById('stat-followers').textContent = profile.followers_count || 0;
   document.getElementById('stat-following').textContent = profile.following_count || 0;
 
@@ -2855,7 +2882,7 @@ function buildWallItem(item, isOwner = false) {
   // User avatar/name
   let userLine = '';
   if (item.profiles) {
-    const av = item.profiles.avatar_url || getAvatarUrl(item.profiles.avatar_seed || item.user_id);
+    const av = sanitizeAvatarUrl(item.profiles.avatar_url) || getAvatarUrl(item.profiles.avatar_seed || item.user_id);
     userLine = `<div class="wall-user">
       <img class="wall-user-avatar" src="${av}" alt="" style="cursor:pointer" onclick="openUserProfile('${item.user_id}')">
       <span class="wall-user-name" onclick="openUserProfile('${item.user_id}')" style="cursor:pointer">@${escapeHtml(item.profiles.username || '')}</span>
@@ -2920,7 +2947,7 @@ async function searchUsers(query) {
 
     resultsEl.style.display = 'block';
     resultsEl.innerHTML = users.map(u => {
-      const av = u.avatar_url || getAvatarUrl(u.avatar_seed || u.id);
+      const av = sanitizeAvatarUrl(u.avatar_url) || getAvatarUrl(u.avatar_seed || u.id);
       return `<div class="search-result-item" onclick="openUserProfile('${u.id}')">
         <img class="search-result-avatar" src="${av}" alt="">
         <div>
@@ -3040,8 +3067,8 @@ function validateEditUsername() {
 async function saveProfile() {
   const btn = document.getElementById('save-profile-btn');
   const username = document.getElementById('edit-username').value.trim().toLowerCase();
-  const fullName = document.getElementById('edit-displayname').value.trim();
-  const bio = document.getElementById('edit-bio').value.trim();
+  const fullName = sanitizeText(document.getElementById('edit-displayname').value.trim());
+  const bio = sanitizeText(document.getElementById('edit-bio').value.trim());
 
   if (!/^[a-z0-9_]{3,20}$/.test(username)) {
     document.getElementById('edit-username-feedback').textContent = 'Invalid username.';
@@ -3164,7 +3191,7 @@ async function loadComments(commitmentId) {
   }
 
   listEl.innerHTML = comments.map(c => {
-    const av = c.profiles?.avatar_url || getAvatarUrl(c.profiles?.avatar_seed || c.user_id);
+    const av = sanitizeAvatarUrl(c.profiles?.avatar_url) || getAvatarUrl(c.profiles?.avatar_seed || c.user_id);
     const time = new Date(c.created_at).toLocaleString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
     return `<div class="comment-item">
       <div class="comment-header">
