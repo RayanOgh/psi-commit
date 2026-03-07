@@ -80,6 +80,7 @@ class CommitmentPost(BaseModel):
     timestamp: str
     user_id: Optional[str] = None
     visibility: Optional[str] = "public"
+    on_wall: Optional[bool] = False
     psc_digest: Optional[str] = None  # SHA256 of canonical PSC JSON
 
 
@@ -111,6 +112,7 @@ async def post_commitment(data: CommitmentPost):
         "committed_at": data.timestamp,
         "user_id": data.user_id,
         "visibility": data.visibility or "public",
+        "on_wall": data.on_wall or False,
         "revealed": False,
         "revealed_message": None,
         "ots_status": "pending",
@@ -132,9 +134,25 @@ async def post_commitment(data: CommitmentPost):
 
 @app.get("/api/wall")
 async def get_wall(limit: int = 50, offset: int = 0):
-    """Return public wall commitments only."""
+    """Return wall commitments (on_wall=true) only."""
     commitments = await db.get_wall(limit=limit, offset=offset)
     return {"commitments": commitments, "total": len(commitments)}
+
+
+@app.post("/api/wall/add/{commitment_id}")
+async def add_to_wall(commitment_id: str, request: Request):
+    """Explicitly add a commitment to the public wall."""
+    user_id = await get_authenticated_user(request)
+    client = get_client()
+    existing = await db.get_commitment(commitment_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Commitment not found")
+    if existing.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not your commitment")
+    if existing.get("visibility") != "public":
+        raise HTTPException(status_code=400, detail="Only public commitments can be added to the wall")
+    client.table("commitments").update({"on_wall": True}).eq("id", commitment_id).execute()
+    return {"success": True}
 
 
 @app.get("/api/commitment/{commitment_id}")
