@@ -10,6 +10,19 @@ import io
 from typing import Optional, List, Dict
 from database import db
 
+try:
+    from opentimestamps.core.timestamp import DetachedTimestampFile, Timestamp
+    from opentimestamps.core.notary import PendingAttestation, BitcoinBlockHeaderAttestation
+    from opentimestamps.core.serialize import (
+        StreamDeserializationContext,
+        BytesDeserializationContext,
+        StreamSerializationContext,
+    )
+    OTS_AVAILABLE = True
+except ImportError:
+    OTS_AVAILABLE = False
+    print("[OTS] opentimestamps library not installed — upgrade/verify features disabled.")
+
 OTS_CALENDARS = [
     "https://alice.btc.calendar.opentimestamps.org",
     "https://bob.btc.calendar.opentimestamps.org",
@@ -28,8 +41,8 @@ def sha256(data: bytes) -> bytes:
 
 def _deserialize_ots(ots_bytes: bytes):
     """Deserialize .ots bytes using the correct opentimestamps context."""
-    from opentimestamps.core.timestamp import DetachedTimestampFile
-    from opentimestamps.core.serialize import StreamDeserializationContext
+    if not OTS_AVAILABLE:
+        raise RuntimeError("opentimestamps library is not installed")
     ctx = StreamDeserializationContext(io.BytesIO(ots_bytes))
     return DetachedTimestampFile.deserialize(ctx)
 
@@ -139,8 +152,6 @@ def find_pending_attestations(ots_file_bytes: bytes) -> List[Dict]:
     that the calendar knows — NOT the original digest.
     """
     try:
-        from opentimestamps.core.notary import PendingAttestation
-
         detached = _deserialize_ots(ots_file_bytes)
         results = []
 
@@ -171,10 +182,6 @@ async def upgrade_ots_file(ots_file_bytes: bytes) -> tuple:
     Returns (upgraded_bytes, block_number) or (None, None).
     """
     try:
-        from opentimestamps.core.timestamp import Timestamp
-        from opentimestamps.core.notary import PendingAttestation, BitcoinBlockHeaderAttestation
-        from opentimestamps.core.serialize import BytesDeserializationContext, StreamSerializationContext
-
         detached = _deserialize_ots(ots_file_bytes)
         upgraded = False
 
@@ -231,8 +238,6 @@ async def upgrade_ots_file(ots_file_bytes: bytes) -> tuple:
             print(f"[OTS] Upgrade done! Block: {block_num}, file: {len(upgraded_bytes)} bytes")
             return upgraded_bytes, block_num
 
-    except ImportError as e:
-        print(f"[OTS] opentimestamps library not installed: {e}")
     except Exception as e:
         print(f"[OTS] Upgrade failed: {e}")
         import traceback
@@ -243,8 +248,6 @@ async def upgrade_ots_file(ots_file_bytes: bytes) -> tuple:
 
 def _find_block_in_timestamp(timestamp) -> Optional[int]:
     """Walk timestamp tree to find BitcoinBlockHeaderAttestation."""
-    from opentimestamps.core.notary import BitcoinBlockHeaderAttestation
-
     for att in timestamp.attestations:
         if isinstance(att, BitcoinBlockHeaderAttestation):
             return att.height
@@ -304,9 +307,6 @@ def parse_bitcoin_block(ots_file_bytes: bytes) -> Optional[int]:
             print(f"[OTS] Parsed OK but no Bitcoin attestation yet")
         return block
 
-    except ImportError:
-        print(f"[OTS] opentimestamps library not installed")
-        return None
     except Exception as e:
         print(f"[OTS] Parse failed: {e}")
         return None
