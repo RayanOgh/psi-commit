@@ -1674,10 +1674,18 @@
         <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="downloadMessage()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:#ff6b6b;border-color:#ff6b6b" id="copy-msg-btn">↓ Save Message (.txt)</button>
           <button class="btn btn-primary" onclick="downloadPSCOnly()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download .psc</button>
-          <button class="btn btn-primary" onclick="downloadStampOnly()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:var(--accent2);border-color:var(--accent2);color:var(--black)">↓ Download .stamp.txt</button>
-          <button class="btn btn-outline" onclick="exportOTS()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="export-ots-btn">↓ Export .ots File</button>
           <button class="btn btn-outline" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Text</button>
           <button class="btn btn-outline" onclick="addToWall()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="add-wall-btn">+ Add to Wall</button>
+        </div>
+        <div style="margin-top:1.25rem;padding:1rem;border:1px solid var(--border);background:rgba(0,240,200,0.03)">
+          <div style="font-family:var(--mono);font-size:0.62rem;letter-spacing:0.15em;color:var(--accent2);text-transform:uppercase;margin-bottom:0.75rem">Independent Verification Files</div>
+          <div style="font-family:var(--mono);font-size:0.65rem;color:#777;margin-bottom:1rem;line-height:1.7">
+            These files let anyone verify your commitment independently — without trusting us. Drop them on the Verify tab or at opentimestamps.org to confirm the Bitcoin timestamp.
+          </div>
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="downloadStampOnly()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:var(--accent2);border-color:var(--accent2);color:var(--black)">↓ Download .stamp.txt</button>
+            <button class="btn btn-outline" onclick="exportOTS()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="export-ots-btn">↓ Export .ots File</button>
+          </div>
         </div>
       </div>
     </div>
