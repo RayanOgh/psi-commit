@@ -3688,6 +3688,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentUser = existingSession.user;
     await ensureProfile(existingSession.user);
     updateAuthUI(existingSession.user);
+  } else {
+    updateAuthUI(null);
   }
 
   // Then listen for auth changes (Google redirect, sign out, etc)
