@@ -1574,11 +1574,38 @@
   <!-- COMMIT PANEL -->
   <div class="tab-panel active" id="commit-panel">
     <!-- Login gate (shown when logged out) -->
-    <div class="login-gate" id="commit-login-gate">
-      <div class="login-gate-icon">🔐</div>
-      <h3>SIGN IN TO COMMIT</h3>
-      <p>Create an account to seal your predictions and build a verifiable track record. Your cryptographic key never leaves your browser.</p>
-      <button class="btn btn-primary" onclick="openModal()">Sign in with Google →</button>
+    <div class="login-gate" id="commit-login-gate" style="max-width:680px;text-align:left;padding:0;border:none;background:transparent">
+      <div style="background:rgba(200,240,0,0.06);border:1px solid rgba(200,240,0,0.2);padding:0.75rem 1.25rem;margin-bottom:1.5rem;font-family:var(--mono);font-size:0.72rem;color:var(--accent);display:flex;align-items:center;gap:0.75rem">
+        <span>⚡ DEMO MODE</span>
+        <span style="color:#999;font-size:0.65rem">Commitments are generated locally but not saved. <a onclick="openModal()" style="color:var(--accent);cursor:pointer;text-decoration:underline">Sign in</a> to save to your profile.</span>
+      </div>
+      <div class="app-card">
+        <div class="field-group">
+          <label class="field-label" for="demo-message">Your message / prediction / hypothesis</label>
+          <textarea id="demo-message" placeholder="e.g. The Fed will cut rates by 25bps at the March 2026 meeting&#10;&#10;Be specific. Be honest. The commitment is only as meaningful as the claim."></textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="demo-context">Context label (optional)</label>
+          <input type="text" id="demo-context" placeholder="e.g. macro-forecast, clinical-trial-2026, team-bet" value="default">
+        </div>
+        <button class="btn btn-primary" onclick="createDemoCommitment()">Generate Commitment (Demo) →</button>
+        <div class="result-box" id="demo-result">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
+            <div style="font-family:var(--mono);font-size:0.68rem;letter-spacing:0.2em;color:var(--accent);text-transform:uppercase">Your Commitment Receipt (Demo)</div>
+            <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)" id="demo-res-time"></div>
+          </div>
+          <div id="demo-commitment-card" style="background:var(--black);border:1px solid #333;padding:1.5rem;font-family:var(--mono);font-size:0.78rem;line-height:2;white-space:pre-wrap;word-break:break-all;color:#ccc"></div>
+          <div style="background:rgba(255,70,70,0.08);border:1px solid rgba(255,70,70,0.3);padding:1rem 1.25rem;margin-top:1.25rem;font-family:var(--mono);font-size:0.72rem;color:#ff6b6b;line-height:1.7">
+            ⚠ DEMO MODE — This commitment is not saved to any server. Download your .psc file and save your message now. <a onclick="openModal()" style="color:var(--accent);cursor:pointer;text-decoration:underline">Sign in</a> to get Bitcoin anchoring and a permanent profile.
+          </div>
+          <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="downloadDemoMessage()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:#ff6b6b;border-color:#ff6b6b" id="demo-copy-msg-btn">↓ Save Message (.txt)</button>
+            <button class="btn btn-primary" onclick="downloadDemoPSC()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download .psc</button>
+            <button class="btn btn-outline" onclick="copyDemoCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Text</button>
+            <button class="btn btn-primary" onclick="openModal()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:var(--accent2);border-color:var(--accent2);color:var(--black)">Sign in to Save →</button>
+          </div>
+        </div>
+      </div>
     </div>
     <!-- Commit form (shown when logged in) -->
     <div class="app-card" id="commit-form" style="display:none">
@@ -2670,7 +2697,7 @@ async function createCommitment() {
   // Auto-save to Supabase if logged in
   if (currentUser) {
     try {
-      await fetch(`${API_BASE}/api/commit`, {
+      const saveRes = await fetch(`${API_BASE}/api/commit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2680,6 +2707,14 @@ async function createCommitment() {
           psc_digest: stampDigest
         })
       });
+      if (saveRes.status === 429) {
+        const err = await saveRes.json();
+        document.getElementById('commit-result').classList.remove('show');
+        document.getElementById('commit-message').style.borderColor = '#ff6060';
+        setTimeout(() => document.getElementById('commit-message').style.borderColor = '', 2000);
+        alert('⚠ ' + err.detail);
+        return;
+      }
     } catch(e) {
       console.log('Auto-save failed, manual add still works');
     }
@@ -2701,6 +2736,87 @@ async function createCommitment() {
   // Auto-download .psc on desktop — iOS blocks programmatic downloads, users tap buttons manually
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
   if (!isIOS) downloadPSCOnly();
+}
+
+// ── DEMO COMMITMENT ──
+let demoCommitment = null;
+
+async function createDemoCommitment() {
+  const message = document.getElementById('demo-message').value.trim();
+  const context = document.getElementById('demo-context').value.trim() || 'default';
+
+  if (!message) {
+    document.getElementById('demo-message').style.borderColor = '#ff6060';
+    setTimeout(() => document.getElementById('demo-message').style.borderColor = '', 1500);
+    return;
+  }
+
+  const key = generateRandomHex(32);
+  const nonce = generateRandomHex(32);
+  const domain = `psi-commit.v1.${context}`;
+  const mac = await computeHMAC(key, domain, nonce, message);
+  const id = 'psc_' + mac.substring(0, 16);
+  const timestamp = new Date().toISOString();
+
+  demoCommitment = { id, key, nonce, mac, domain, context, message, timestamp, visibility: 'public' };
+
+  const card = [
+    `PSI-COMMIT RECEIPT (DEMO)`,
+    `${'─'.repeat(48)}`,
+    `ID        ${id}`,
+    `DATE      ${new Date(timestamp).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })}`,
+    `CONTEXT   ${domain}`,
+    `${'─'.repeat(48)}`,
+    `MAC       ${mac}`,
+    `NONCE     ${nonce}`,
+    `${'─'.repeat(48)}`,
+    `SECRET KEY (keep private — do not share until reveal)`,
+    `${key}`,
+    `${'─'.repeat(48)}`,
+    `DEMO MODE — Not anchored to Bitcoin. Sign in at psicommit.com to get a permanent proof.`,
+  ].join('\n');
+
+  document.getElementById('demo-commitment-card').textContent = card;
+  document.getElementById('demo-res-time').textContent = new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  document.getElementById('demo-result').classList.add('show');
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  if (!isIOS) downloadDemoPSC();
+}
+
+function downloadDemoMessage() {
+  if (!demoCommitment) return;
+  const filename = demoCommitment.id.replace('psc_', '');
+  const text = `PSI-COMMIT MESSAGE (DEMO)\n${'─'.repeat(48)}\nID: ${demoCommitment.id}\nDate: ${new Date(demoCommitment.timestamp).toLocaleString()}\n${'─'.repeat(48)}\n\n${demoCommitment.message}\n\n${'─'.repeat(48)}\nKeep this file private until you are ready to reveal.\npsicommit.com`;
+  triggerDownload(filename + '.message.txt', text);
+}
+
+function downloadDemoPSC() {
+  if (!demoCommitment) return;
+  const data = {
+    version: '1',
+    id: demoCommitment.id,
+    mac: demoCommitment.mac,
+    nonce: demoCommitment.nonce,
+    domain: demoCommitment.domain,
+    context: demoCommitment.context,
+    timestamp: demoCommitment.timestamp,
+    key: demoCommitment.key,
+    demo: true,
+    created_by: 'psicommit.com',
+    _note: 'DEMO — Not Bitcoin-anchored. Sign in at psicommit.com for a permanent proof.'
+  };
+  triggerDownload(demoCommitment.id.replace('psc_', '') + '.psc', JSON.stringify(data, null, 2));
+}
+
+function copyDemoCard() {
+  const text = document.getElementById('demo-commitment-card').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => btn.textContent = orig, 2000);
+  });
 }
 
 // ── COPY / DOWNLOAD ──
