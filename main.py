@@ -97,11 +97,28 @@ async def serve_frontend():
     return FileResponse("static/index.html")
 
 
+COMMITMENT_LIMIT = 10
+
 @app.post("/api/commit")
 async def post_commitment(data: CommitmentPost):
     existing = await db.get_commitment(data.id)
     if existing:
         return {"success": True, "id": data.id, "already_exists": True}
+
+    # Check commitment limit — count unrevealed commitments for this user
+    if data.user_id:
+        client = get_client()
+        result = client.table("commitments") \
+            .select("id", count="exact") \
+            .eq("user_id", data.user_id) \
+            .eq("revealed", False) \
+            .execute()
+        unrevealed_count = result.count or 0
+        if unrevealed_count >= COMMITMENT_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Commitment limit reached. You have {unrevealed_count} unrevealed commitments. Reveal some before making new ones. (Limit: {COMMITMENT_LIMIT})"
+            )
 
     commitment = {
         "id": data.id,
