@@ -3,7 +3,7 @@
 Cryptographic commitment scheme for verifiable decisions, predictions, and experimental pre-registration.
 
 [![Python](https://img.shields.io/badge/python-3.8+-blue)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 
 ## What Is This?
 
