@@ -1421,6 +1421,41 @@
   </div>
 </div>
 
+<!-- REVEAL MODAL -->
+<div class="modal-overlay" id="reveal-modal">
+  <div class="modal" style="max-width:560px">
+    <button class="modal-close" onclick="closeRevealModal()">✕</button>
+    <div class="modal-title" style="font-size:1.6rem;margin-bottom:0.25rem">REVEAL COMMITMENT</div>
+    <div style="font-family:var(--mono);font-size:0.68rem;color:var(--muted);margin-bottom:1.5rem" id="reveal-modal-id"></div>
+
+    <div class="field-group">
+      <label class="field-label">Step 1 — Load your .psc receipt</label>
+      <div id="reveal-psc-drop" class="drop-zone" ondragover="event.preventDefault()" ondrop="handleRevealPSCDrop(event)" onclick="document.getElementById('reveal-psc-input').click()">
+        <div id="reveal-psc-label">Drop .psc file here<br><span style="font-size:0.65rem;color:#555">or click to browse</span></div>
+        <input type="file" id="reveal-psc-input" accept=".psc,.json" style="display:none" onchange="handleRevealPSCFile(this.files[0])">
+      </div>
+      <div style="text-align:center;font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin:0.75rem 0">— or paste receipt —</div>
+      <textarea id="reveal-psc-paste" placeholder="Paste .psc JSON contents here..." style="min-height:70px;font-size:0.78rem" oninput="parseRevealReceipt()"></textarea>
+      <div id="reveal-key-status" style="font-family:var(--mono);font-size:0.65rem;margin-top:0.4rem"></div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Step 2 — Enter or drop your original message</label>
+      <div id="reveal-msg-drop" class="drop-zone" style="margin-bottom:0.75rem" ondragover="event.preventDefault()" ondrop="handleRevealMsgDrop(event)" onclick="document.getElementById('reveal-msg-input').click()">
+        <div id="reveal-msg-label">Drop .txt message file here<br><span style="font-size:0.65rem;color:#555">or type below</span></div>
+        <input type="file" id="reveal-msg-input" accept=".txt" style="display:none" onchange="handleRevealMsgFile(this.files[0])">
+      </div>
+      <textarea id="reveal-message" placeholder="Type or paste your original message exactly as it was committed..." style="min-height:100px"></textarea>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="submitReveal()" id="reveal-submit-btn">Reveal Commitment →</button>
+      <button class="btn btn-outline" onclick="closeRevealModal()">Cancel</button>
+    </div>
+    <div id="reveal-error" style="display:none;margin-top:1rem;font-family:var(--mono);font-size:0.75rem;color:#ff6060;padding:0.75rem;border:1px solid rgba(255,96,96,0.3);background:rgba(255,96,96,0.08)"></div>
+  </div>
+</div>
+
 <!-- NAV -->
 <nav>
   <a class="nav-logo" href="#" onclick="showMainPage()">PSI — COMMIT</a>
@@ -2212,6 +2247,9 @@ document.getElementById('auth-modal').addEventListener('click', function(e) {
 });
 document.getElementById('follow-modal').addEventListener('click', function(e) {
   if (e.target === this) this.classList.remove('open');
+});
+document.getElementById('reveal-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeRevealModal();
 });
 
 // ── PROFILE CREATION ──
@@ -3284,45 +3322,148 @@ async function renderWall() {
   grid.innerHTML = publicItems.map(item => buildWallItem(item)).join('');
 }
 
-async function revealItem(commitmentId) {
-  const receipt = prompt(`Paste the contents of your .psc file for ${commitmentId}:\n\n(Open the .psc file in a text editor, select all, copy, and paste here)`);
-  if (!receipt) return;
+// ── REVEAL MODAL ──
+let revealTargetId = null;
+let revealKeyHex = null;
 
-  let key_hex;
+function openRevealModal(commitmentId) {
+  revealTargetId = commitmentId;
+  revealKeyHex = null;
+  document.getElementById('reveal-modal-id').textContent = commitmentId;
+  document.getElementById('reveal-psc-paste').value = '';
+  document.getElementById('reveal-message').value = '';
+  document.getElementById('reveal-key-status').textContent = '';
+  document.getElementById('reveal-key-status').style.color = '';
+  document.getElementById('reveal-psc-label').textContent = 'Drop .psc file here';
+  document.getElementById('reveal-psc-drop').classList.remove('loaded');
+  document.getElementById('reveal-msg-label').textContent = 'Drop .txt message file here';
+  document.getElementById('reveal-msg-drop').classList.remove('loaded');
+  document.getElementById('reveal-error').style.display = 'none';
+  document.getElementById('reveal-modal').classList.add('open');
+}
 
-  // Try JSON format first (.psc file)
+function closeRevealModal() {
+  document.getElementById('reveal-modal').classList.remove('open');
+  revealTargetId = null;
+  revealKeyHex = null;
+}
+
+function handleRevealPSCDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) handleRevealPSCFile(file);
+}
+
+function handleRevealMsgDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) handleRevealMsgFile(file);
+}
+
+function handleRevealPSCFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('reveal-psc-paste').value = e.target.result;
+    parseRevealReceipt();
+    document.getElementById('reveal-psc-drop').classList.add('loaded');
+    document.getElementById('reveal-psc-label').textContent = `✓ ${file.name}`;
+  };
+  reader.readAsText(file);
+}
+
+function handleRevealMsgFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('reveal-message').value = e.target.result;
+    document.getElementById('reveal-msg-drop').classList.add('loaded');
+    document.getElementById('reveal-msg-label').textContent = `✓ ${file.name}`;
+  };
+  reader.readAsText(file);
+}
+
+function parseRevealReceipt() {
+  const text = document.getElementById('reveal-psc-paste').value.trim();
+  const statusEl = document.getElementById('reveal-key-status');
+  if (!text) { statusEl.textContent = ''; revealKeyHex = null; return; }
+
   try {
-    const data = JSON.parse(receipt.trim());
-    key_hex = data.key;
-  } catch(e) {
-    // Fall back to text receipt format
-    const keyMatch = receipt.match(/SECRET KEY[^\n]*\n([a-f0-9]{64})/i) || receipt.match(/([a-f0-9]{64})\s*$/im);
-    if (keyMatch) key_hex = keyMatch[1];
-  }
+    const data = JSON.parse(text);
+    if (data.key) {
+      revealKeyHex = data.key;
+      statusEl.textContent = '✓ Key found in receipt';
+      statusEl.style.color = 'var(--accent)';
+      // Also pre-fill message if it exists in the psc
+      if (data.message && !document.getElementById('reveal-message').value) {
+        document.getElementById('reveal-message').value = data.message;
+      }
+      return;
+    }
+  } catch(e) {}
 
-  if (!key_hex) {
-    alert('Could not find the secret key in your receipt. Make sure you pasted the full .psc file contents.');
+  // Try text format
+  const keyMatch = text.match(/SECRET KEY[^\n]*\n([a-f0-9]{64})/i) || text.match(/([a-f0-9]{64})\s*$/im);
+  if (keyMatch) {
+    revealKeyHex = keyMatch[1];
+    statusEl.textContent = '✓ Key found in receipt';
+    statusEl.style.color = 'var(--accent)';
+  } else {
+    revealKeyHex = null;
+    statusEl.textContent = '✗ No key found — make sure you pasted the full .psc contents';
+    statusEl.style.color = '#ff6060';
+  }
+}
+
+async function submitReveal() {
+  const message = document.getElementById('reveal-message').value.trim();
+  const errorEl = document.getElementById('reveal-error');
+  const btn = document.getElementById('reveal-submit-btn');
+
+  errorEl.style.display = 'none';
+
+  if (!revealKeyHex) {
+    errorEl.textContent = 'Please load your .psc file or paste its contents first.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (!message) {
+    errorEl.textContent = 'Please enter your original message.';
+    errorEl.style.display = 'block';
     return;
   }
 
-  const message = prompt('Enter your original message:');
-  if (!message) return;
+  btn.textContent = 'Revealing...';
+  btn.disabled = true;
 
   try {
-    const res = await fetch(`${API_BASE}/api/reveal/${commitmentId}`, {
+    const res = await fetch(`${API_BASE}/api/reveal/${revealTargetId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: commitmentId, message, key_hex })
+      body: JSON.stringify({ id: revealTargetId, message, key_hex: revealKeyHex })
     });
     if (res.ok) {
-      renderWall();
+      closeRevealModal();
+      if (document.getElementById('profile-page').classList.contains('active')) {
+        await loadProfileData(viewingUserId);
+      } else {
+        renderWall();
+      }
     } else {
       const err = await res.json();
-      alert(err.detail || 'Verification failed');
+      errorEl.textContent = err.detail || 'Verification failed — message or key does not match the commitment.';
+      errorEl.style.display = 'block';
     }
   } catch(e) {
-    alert('Error revealing commitment');
+    errorEl.textContent = 'Error revealing commitment. Try again.';
+    errorEl.style.display = 'block';
   }
+
+  btn.textContent = 'Reveal Commitment →';
+  btn.disabled = false;
+}
+
+async function revealItem(commitmentId) {
+  openRevealModal(commitmentId);
+}
 }
 
 // ── EDIT PROFILE ──
