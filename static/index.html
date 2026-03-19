@@ -2376,7 +2376,7 @@ async function loadProfileData(userId = null) {
   const accountAgeEl = document.getElementById('stat-account-age');
   if (profile.created_at) {
     const joined = new Date(profile.created_at);
-    accountAgeEl.textContent = joined.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    accountAgeEl.textContent = joined.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   // Show bio if exists
