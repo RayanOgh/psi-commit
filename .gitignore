@@ -205,3 +205,12 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+# Proprietary files — do not publish
+main.py
+database.py
+ots.py
+static/index.html
+static/og-image.png
+static/favicon.ico
+static/favicon-32.png
+Procfile
