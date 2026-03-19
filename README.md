@@ -178,9 +178,6 @@ A: Yes. If you lose your key, you cannot prove what you committed to. This is by
 
 A: No. It uses cryptographic commitments but is much simpler than blockchain. You can optionally anchor commitments in Bitcoin via OpenTimestamps.
 
-## License
-
-MIT License - see [LICENSE](LICENSE) file.
 
 ## Links
 
