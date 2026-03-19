@@ -1478,6 +1478,14 @@
           <div class="profile-stat-val" id="stat-following">0</div>
           <div class="profile-stat-label" style="text-decoration:underline;text-underline-offset:3px">Following</div>
         </div>
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="stat-reveal-rate" style="color:var(--accent)">—</div>
+          <div class="profile-stat-label">Reveal Rate</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat-val" id="stat-account-age" style="font-size:0.75rem;font-family:var(--mono);color:var(--muted)">—</div>
+          <div class="profile-stat-label">Member Since</div>
+        </div>
       </div>
     </div>
   </div>
@@ -2346,7 +2354,7 @@ async function loadProfileData(userId = null) {
   // Fetch profile
   const { data: profile } = await sb
     .from('profiles')
-    .select('*')
+    .select('*, created_at')
     .eq('id', targetId)
     .single();
 
@@ -2363,6 +2371,13 @@ async function loadProfileData(userId = null) {
   document.getElementById('profile-handle').textContent = '@' + sanitizeText(profile.username);
   document.getElementById('stat-followers').textContent = profile.followers_count || 0;
   document.getElementById('stat-following').textContent = profile.following_count || 0;
+
+  // Account age
+  const accountAgeEl = document.getElementById('stat-account-age');
+  if (profile.created_at) {
+    const joined = new Date(profile.created_at);
+    accountAgeEl.textContent = joined.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  }
 
   // Show bio if exists
   const bioEl = document.getElementById('profile-bio');
@@ -2412,6 +2427,20 @@ async function loadProfileData(userId = null) {
     .order('committed_at', { ascending: false });
 
   document.getElementById('stat-public').textContent = publicCommits?.length || 0;
+  
+  // Reveal rate — all public commits revealed vs total
+  const totalPublic = publicCommits?.length || 0;
+  const totalRevealed = publicCommits?.filter(c => c.revealed).length || 0;
+  const revealRateEl = document.getElementById('stat-reveal-rate');
+  if (totalPublic === 0) {
+    revealRateEl.textContent = '—';
+    revealRateEl.title = 'No commitments yet';
+  } else {
+    const rate = Math.round((totalRevealed / totalPublic) * 100);
+    revealRateEl.textContent = rate + '%';
+    revealRateEl.title = `${totalRevealed} revealed out of ${totalPublic} public commitments`;
+  }
+
   renderProfileCommits('public-wall-container', publicCommits || []);
 
   if (isOwnProfile) {
