@@ -2824,7 +2824,7 @@ async function createDemoCommitment() {
 
 function downloadDemoMessage() {
   if (!demoCommitment) return;
-  const filename = demoCommitment.id.replace('psc_', '');
+  const filename = buildFilename('Message', demoCommitment.mac);
   const text = `PSI-COMMIT MESSAGE (DEMO)\n${'─'.repeat(48)}\nID: ${demoCommitment.id}\nDate: ${new Date(demoCommitment.timestamp).toLocaleString()}\n${'─'.repeat(48)}\n\n${demoCommitment.message}\n\n${'─'.repeat(48)}\nKeep this file private until you are ready to reveal.\npsicommit.com`;
   triggerDownload(filename + '.message.txt', text);
 }
@@ -2844,7 +2844,7 @@ function downloadDemoPSC() {
     created_by: 'psicommit.com',
     _note: 'DEMO — Not Bitcoin-anchored. Sign in at psicommit.com for a permanent proof.'
   };
-  triggerDownload(demoCommitment.id.replace('psc_', '') + '.psc', JSON.stringify(data, null, 2));
+  triggerDownload(buildFilename('PSC', demoCommitment.mac) + '.psc', JSON.stringify(data, null, 2));
 }
 
 function copyDemoCard() {
@@ -2870,7 +2870,7 @@ function copyCard() {
 
 function downloadMessage() {
   if (!currentCommitment || !currentCommitment.message) return;
-  const filename = (currentCommitment.id || 'commitment').replace('psc_', '');
+  const filename = buildFilename('Message', currentCommitment.mac);
   const text = `PSI-COMMIT MESSAGE\n${'─'.repeat(48)}\nID: ${currentCommitment.id}\nDate: ${new Date(currentCommitment.timestamp).toLocaleString()}\n${'─'.repeat(48)}\n\n${currentCommitment.message}\n\n${'─'.repeat(48)}\nKeep this file private until you are ready to reveal.\npsicommit.com`;
   triggerDownload(filename + '.message.txt', text);
   const btn = document.getElementById('copy-msg-btn');
@@ -2923,15 +2923,21 @@ async function buildStampDigest(commitment) {
   return await sha256Hex(buildStampFile(commitment));
 }
 
+// Build a clean filename from MAC: "PSC-abc123ef", "Stamp-abc123ef", "OTS-abc123ef"
+function buildFilename(prefix, mac) {
+  const short = (mac || '').substring(0, 12);
+  return `${prefix}-${short}`;
+}
+
 function downloadPSCOnly() {
   if (!currentCommitment) return;
-  const filename = currentCommitment.id.replace('psc_', '');
+  const filename = buildFilename('PSC', currentCommitment.mac);
   downloadPSCFile(filename);
 }
 
 function downloadStampOnly() {
   if (!currentCommitment) return;
-  const filename = currentCommitment.id.replace('psc_', '');
+  const filename = buildFilename('Stamp', currentCommitment.mac);
   downloadStampFile(filename);
 }
 
@@ -2969,7 +2975,7 @@ function exportOTS(commitment = null) {
     return;
   }
 
-  const filename = (c.id || 'commitment').replace('psc_', '');
+  const filename = buildFilename('OTS', c.mac || c.id);
 
   // Convert hex to binary
   const bytes = new Uint8Array(otsHex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
@@ -3013,7 +3019,7 @@ async function downloadCommitmentPSC(commitmentId) {
     created_by: 'psicommit.com'
   };
 
-  triggerDownload(c.id + '.psc', JSON.stringify(data, null, 2));
+  triggerDownload(buildFilename('PSC', c.mac) + '.psc', JSON.stringify(data, null, 2));
 }
 
 function downloadCommitmentStamp(commitmentId, mac, timestamp) {
@@ -3024,14 +3030,13 @@ function downloadCommitmentStamp(commitmentId, mac, timestamp) {
     `timestamp: ${timestamp}`,
     `site: psicommit.com`,
   ].join('\n');
-  triggerDownload(commitmentId + '.stamp.txt', stampText);
+  triggerDownload(buildFilename('Stamp', mac) + '.stamp.txt', stampText);
 }
 
 async function exportCommitmentOTS(commitmentId) {
-  // Export .ots for an existing commitment from profile page
   const { data: c } = await sb
     .from('commitments')
-    .select('id, ots_receipt, ots_status')
+    .select('id, mac, ots_receipt, ots_status')
     .eq('id', commitmentId)
     .single();
 
@@ -3040,7 +3045,7 @@ async function exportCommitmentOTS(commitmentId) {
     return;
   }
 
-  exportOTS({ id: c.id, otsHex: c.ots_receipt, ots_receipt: c.ots_receipt });
+  exportOTS({ id: c.id, mac: c.mac, otsHex: c.ots_receipt, ots_receipt: c.ots_receipt });
 }
 
 // ── PARSE RECEIPT ──
