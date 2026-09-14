@@ -2768,7 +2768,10 @@ async function createCommitment() {
     }
   }
 
-  // Fetch OTS receipt from server (may take a few seconds after anchor)
+  // Fetch OTS/TSA receipts from server (may take a few seconds after anchor),
+  // then auto-download the .psc so it's complete — iOS blocks programmatic
+  // downloads, so those users just tap the button manually once ready.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
   setTimeout(async () => {
     try {
       const r = await fetch(`${API_BASE}/api/commitment/${id}`);
@@ -2785,11 +2788,8 @@ async function createCommitment() {
         currentCommitment.tsa_status = data.tsa_status || currentCommitment.tsa_status;
       }
     } catch(e) {}
+    if (!isIOS) downloadPSCOnly();
   }, 3000);
-
-  // Auto-download .psc on desktop — iOS blocks programmatic downloads, users tap buttons manually
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  if (!isIOS) downloadPSCOnly();
 }
 
 // ── DEMO COMMITMENT ──
