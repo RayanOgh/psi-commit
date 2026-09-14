@@ -51,7 +51,7 @@ class Database:
             .select(
                 "id, mac, nonce, context, domain, committed_at, visibility, "
                 "revealed, revealed_message, revealed_key, ots_status, bitcoin_block, ots_confirmed_at, "
-                "user_id, profiles(username, avatar_url, avatar_seed)"
+                "tsa_status, user_id, profiles(username, avatar_url, avatar_seed)"
             )
             .eq("on_wall", True)
             .order("committed_at", desc=True)
@@ -74,7 +74,8 @@ class Database:
             client.table("commitments")
             .select(
                 "id, mac, nonce, context, domain, committed_at, visibility, "
-                "revealed, revealed_message, revealed_key, ots_status, bitcoin_block, ots_confirmed_at"
+                "revealed, revealed_message, revealed_key, ots_status, bitcoin_block, ots_confirmed_at, "
+                "tsa_status"
             )
             .eq("user_id", user_id)
             .order("committed_at", desc=True)
@@ -111,6 +112,20 @@ class Database:
             "revealed_key": key_hex,
             "revealed_at": "now()"
         }).eq("id", commitment_id).execute()
+
+    async def update_tsa(
+        self,
+        commitment_id: str,
+        tsa_receipt: Optional[bytes],
+        tsa_status: str
+    ):
+        """Store the RFC 3161 (.tsr) timestamp token from FreeTSA."""
+        client = get_client()
+        update = {
+            "tsa_receipt": tsa_receipt.hex() if isinstance(tsa_receipt, bytes) else tsa_receipt,
+            "tsa_status": tsa_status,
+        }
+        client.table("commitments").update(update).eq("id", commitment_id).execute()
 
     async def update_ots_digest(self, commitment_id: str, digest_hex: str):
         """Store the OTS digest (SHA256 of MAC) for later confirmation checks."""

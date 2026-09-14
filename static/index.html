@@ -1685,6 +1685,7 @@
           <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
             <button class="btn btn-primary" onclick="downloadStampOnly()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:var(--accent2);border-color:var(--accent2);color:var(--black)">↓ Download .stamp.txt</button>
             <button class="btn btn-outline" onclick="exportOTS()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="export-ots-btn">↓ Export .ots File</button>
+            <button class="btn btn-outline" onclick="exportTSA()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="export-tsa-btn">↓ Export .tsr File</button>
           </div>
         </div>
       </div>
@@ -2775,6 +2776,9 @@ async function createCommitment() {
         if (data.ots_receipt) {
           currentCommitment.otsHex = data.ots_receipt;
         }
+        if (data.tsa_receipt) {
+          currentCommitment.tsaHex = data.tsa_receipt;
+        }
       }
     } catch(e) {}
   }, 3000);
@@ -2998,6 +3002,31 @@ function exportOTS(commitment = null) {
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
 }
 
+function exportTSA(commitment = null) {
+  const c = commitment || currentCommitment;
+  if (!c) return;
+
+  const tsaHex = c.tsaHex || c.tsa_receipt;
+  if (!tsaHex) {
+    alert('RFC 3161 timestamp not yet available — try again in a few seconds, or re-download from your profile once it completes.');
+    return;
+  }
+
+  const filename = buildFilename('TSA', c.mac || c.id);
+
+  // Convert hex to binary
+  const bytes = new Uint8Array(tsaHex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+  const blob = new Blob([bytes], { type: 'application/timestamp-reply' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename + '.tsr';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+}
+
 async function downloadCommitmentPSC(commitmentId) {
   // Download .psc for an existing commitment from profile page
   const { data: c } = await sb
@@ -3023,6 +3052,8 @@ async function downloadCommitmentPSC(commitmentId) {
     ots: c.ots_receipt || null,
     bitcoin_block: c.bitcoin_block || null,
     ots_status: c.ots_status,
+    tsa: c.tsa_receipt || null,
+    tsa_status: c.tsa_status,
     note: 'Secret key not included — retrieve from your original .psc receipt.',
     created_by: 'psicommit.com'
   };
@@ -3054,6 +3085,21 @@ async function exportCommitmentOTS(commitmentId) {
   }
 
   exportOTS({ id: c.id, mac: c.mac, otsHex: c.ots_receipt, ots_receipt: c.ots_receipt });
+}
+
+async function exportCommitmentTSA(commitmentId) {
+  const { data: c } = await sb
+    .from('commitments')
+    .select('id, mac, tsa_receipt, tsa_status')
+    .eq('id', commitmentId)
+    .single();
+
+  if (!c?.tsa_receipt) {
+    alert('RFC 3161 timestamp not available yet.');
+    return;
+  }
+
+  exportTSA({ id: c.id, mac: c.mac, tsaHex: c.tsa_receipt, tsa_receipt: c.tsa_receipt });
 }
 
 // ── PARSE RECEIPT ──
@@ -3253,6 +3299,7 @@ function buildWallItem(item, isOwner = false) {
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="downloadCommitmentPSC('${item.id}')">↓ .psc</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="downloadCommitmentStamp('${item.id}', '${item.mac}', '${item.committed_at || item.timestamp}')">↓ .stamp.txt</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="exportCommitmentOTS('${item.id}')">↓ .ots</button>` : ''}
+        ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="exportCommitmentTSA('${item.id}')">↓ .tsr</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:#ff6060;border-color:#ff6060" onclick="deleteCommitment('${item.id}')">Delete</button>` : ''}
       </div>
     </div>

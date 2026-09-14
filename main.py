@@ -17,6 +17,7 @@ from datetime import datetime
 
 from database import db, get_client
 from ots import anchor_commitment, check_ots_status
+from tsa import anchor_commitment_tsa
 
 
 def require_admin():
@@ -135,17 +136,20 @@ async def post_commitment(data: CommitmentPost):
         "ots_status": "pending",
         "ots_receipt": None,
         "bitcoin_block": None,
+        "tsa_status": "pending",
+        "tsa_receipt": None,
     }
 
     await db.insert_commitment(commitment)
-    # Use PSC digest for OTS if provided, otherwise fall back to MAC
+    # Use PSC digest for OTS/TSA if provided, otherwise fall back to MAC
     ots_digest = data.psc_digest or None
     asyncio.create_task(anchor_commitment(data.id, data.mac, timestamp=data.timestamp, psc_digest=ots_digest))
+    asyncio.create_task(anchor_commitment_tsa(data.id, data.mac, timestamp=data.timestamp, psc_digest=ots_digest))
 
     return {
         "success": True,
         "id": data.id,
-        "message": "Commitment saved and Bitcoin anchoring started."
+        "message": "Commitment saved. Bitcoin anchoring and RFC 3161 timestamping started."
     }
 
 
@@ -573,6 +577,24 @@ async def download_ots(commitment_id: str):
         content=ots_bytes,
         media_type="application/octet-stream",
         headers={"Content-Disposition": f"attachment; filename={commitment_id}.ots"}
+    )
+
+
+@app.get("/api/tsa/{commitment_id}/download")
+async def download_tsa(commitment_id: str):
+    """Download the raw RFC 3161 .tsr timestamp token for a commitment."""
+    commitment = await db.get_commitment(commitment_id)
+    if not commitment:
+        raise HTTPException(status_code=404, detail="Commitment not found")
+    tsa_hex = commitment.get("tsa_receipt")
+    if not tsa_hex:
+        raise HTTPException(status_code=404, detail="RFC 3161 timestamp not yet available.")
+    tsa_bytes = bytes.fromhex(tsa_hex)
+    from fastapi.responses import Response
+    return Response(
+        content=tsa_bytes,
+        media_type="application/timestamp-reply",
+        headers={"Content-Disposition": f"attachment; filename={commitment_id}.tsr"}
     )
 
 
