@@ -1645,8 +1645,29 @@
     <!-- Commit form (shown when logged in) -->
     <div class="app-card" id="commit-form" style="display:none">
       <div class="field-group">
+        <label class="field-label">What are you committing to?</label>
+        <div class="visibility-toggle">
+          <button class="vis-btn active" id="commit-mode-message" onclick="setCommitMode('message')">✎ Commit a Message</button>
+          <button class="vis-btn" id="commit-mode-file" onclick="setCommitMode('file')">📎 Commit a File</button>
+        </div>
+      </div>
+      <div class="field-group" id="commit-message-fields">
         <label class="field-label" for="commit-message">Your message / prediction / hypothesis</label>
         <textarea id="commit-message" placeholder="e.g. The Fed will cut rates by 25bps at the March 2026 meeting&#10;&#10;Be specific. Be honest. The commitment is only as meaningful as the claim."></textarea>
+      </div>
+      <div id="commit-file-fields" style="display:none">
+        <div class="field-group">
+          <label class="field-label">File to commit</label>
+          <div id="commit-file-drop" class="drop-zone" ondragover="event.preventDefault()" ondrop="handleCommitFileDrop(event)" onclick="document.getElementById('commit-file-input').click()">
+            <div id="commit-file-label">Drop a file here<br><span style="font-size:0.65rem;color:#555">or click to browse — any file type. Hashed locally, never uploaded.</span></div>
+          </div>
+          <input type="file" id="commit-file-input" style="display:none" onchange="handleCommitFile(this.files[0])">
+          <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.5rem;word-break:break-all" id="commit-file-status"></div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="commit-file-description">Describe what this file is</label>
+          <textarea id="commit-file-description" placeholder="e.g. Final draft of the Q1 term sheet, signed and dated&#10;&#10;Only the file's SHA-256 hash and this description are committed — the file itself never leaves your browser."></textarea>
+        </div>
       </div>
       <div class="field-group">
         <label class="field-label" for="commit-context">Context label (optional)</label>
@@ -2693,17 +2714,94 @@ async function computeHMAC(keyHex, domain, nonce, message) {
   return bytesToHex(new Uint8Array(signature));
 }
 
+// ── COMMIT MODE (message vs file) ──
+let commitMode = 'message';
+let commitFileInfo = null; // { hash, name, size }
+
+function setCommitMode(mode) {
+  commitMode = mode;
+  document.getElementById('commit-mode-message').classList.toggle('active', mode === 'message');
+  document.getElementById('commit-mode-file').classList.toggle('active', mode === 'file');
+  document.getElementById('commit-message-fields').style.display = mode === 'message' ? '' : 'none';
+  document.getElementById('commit-file-fields').style.display = mode === 'file' ? '' : 'none';
+}
+
+function parseFileCommitmentMessage(message) {
+  const m = message && message.match(/^FILE_HASH:([a-f0-9]{64})\nDESCRIPTION:([\s\S]*)$/);
+  return m ? { file_hash: m[1], file_description: m[2] } : { file_hash: null, file_description: null };
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+function handleCommitFileDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) handleCommitFile(file);
+}
+
+async function handleCommitFile(file) {
+  if (!file) return;
+  commitFileInfo = null;
+  const zone = document.getElementById('commit-file-drop');
+  const labelEl = document.getElementById('commit-file-label');
+  const statusEl = document.getElementById('commit-file-status');
+  zone.classList.remove('loaded');
+  labelEl.textContent = `Hashing ${file.name}...`;
+  statusEl.textContent = '';
+
+  try {
+    // File never leaves the browser — only its SHA-256 digest is used.
+    const buf = await file.arrayBuffer();
+    const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+    const hashHex = bytesToHex(new Uint8Array(hashBuf));
+    commitFileInfo = { hash: hashHex, name: file.name, size: file.size };
+    zone.classList.add('loaded');
+    labelEl.textContent = `✓ ${file.name} (${formatFileSize(file.size)})`;
+    statusEl.textContent = `SHA-256: ${hashHex}`;
+  } catch (e) {
+    labelEl.innerHTML = 'Drop a file here<br><span style="font-size:0.65rem;color:#555">or click to browse — any file type. Hashed locally, never uploaded.</span>';
+    statusEl.textContent = 'Failed to hash file — try again.';
+  }
+}
+
 // ── COMMIT ──
 async function createCommitment() {
   if (!currentUser) { openModal(); return; }
 
-  const message = document.getElementById('commit-message').value.trim();
   const context = document.getElementById('commit-context').value.trim() || 'default';
 
-  if (!message) {
-    document.getElementById('commit-message').style.borderColor = '#ff6060';
-    setTimeout(() => document.getElementById('commit-message').style.borderColor = '', 1500);
-    return;
+  let message, fileHash = null, fileDescription = null;
+
+  if (commitMode === 'file') {
+    const description = document.getElementById('commit-file-description').value.trim();
+
+    if (!commitFileInfo) {
+      const zone = document.getElementById('commit-file-drop');
+      zone.style.borderColor = '#ff6060';
+      setTimeout(() => zone.style.borderColor = '', 1500);
+      return;
+    }
+    if (!description) {
+      document.getElementById('commit-file-description').style.borderColor = '#ff6060';
+      setTimeout(() => document.getElementById('commit-file-description').style.borderColor = '', 1500);
+      return;
+    }
+
+    fileHash = commitFileInfo.hash;
+    fileDescription = description;
+    message = `FILE_HASH:${fileHash}\nDESCRIPTION:${fileDescription}`;
+  } else {
+    message = document.getElementById('commit-message').value.trim();
+    if (!message) {
+      document.getElementById('commit-message').style.borderColor = '#ff6060';
+      setTimeout(() => document.getElementById('commit-message').style.borderColor = '', 1500);
+      return;
+    }
   }
 
   const key = generateRandomHex(32);
@@ -2713,7 +2811,10 @@ async function createCommitment() {
   const id = 'psc_' + mac.substring(0, 16);
   const timestamp = new Date().toISOString();
 
-  currentCommitment = { id, key, nonce, mac, domain, context, message, timestamp, visibility: commitVisibility };
+  currentCommitment = {
+    id, key, nonce, mac, domain, context, message, timestamp, visibility: commitVisibility,
+    file_hash: fileHash, file_description: fileDescription
+  };
 
   const card = [
     `PSI-COMMIT RECEIPT`,
@@ -2923,6 +3024,8 @@ function buildPSCData(commitment) {
     timestamp: commitment.timestamp,
     visibility: commitment.visibility,
     key: commitment.key,
+    file_hash: commitment.file_hash || null,
+    file_description: commitment.file_description || null,
     ots_receipt: commitment.otsHex || commitment.ots_receipt || null,
     ots_status: commitment.ots_status || null,
     bitcoin_block: commitment.bitcoin_block || null,
@@ -3046,6 +3149,9 @@ async function downloadCommitmentPSC(commitmentId) {
 
   if (!c) { alert('Commitment not found.'); return; }
 
+  // File commitments encode as "FILE_HASH:<hex>\nDESCRIPTION:<text>" — pull those back out if revealed.
+  const fileInfo = parseFileCommitmentMessage(c.revealed_message);
+
   // Note: key is NOT stored server-side — we can only include what we have
   const data = {
     version: '1',
@@ -3058,6 +3164,8 @@ async function downloadCommitmentPSC(commitmentId) {
     context: c.context,
     timestamp: c.committed_at,
     visibility: c.visibility,
+    file_hash: fileInfo.file_hash,
+    file_description: fileInfo.file_description,
     ots_receipt: c.ots_receipt || null,
     bitcoin_block: c.bitcoin_block || null,
     ots_status: c.ots_status,
