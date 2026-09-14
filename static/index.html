@@ -2776,9 +2776,12 @@ async function createCommitment() {
         if (data.ots_receipt) {
           currentCommitment.otsHex = data.ots_receipt;
         }
+        currentCommitment.ots_status = data.ots_status || currentCommitment.ots_status;
+        currentCommitment.bitcoin_block = data.bitcoin_block || currentCommitment.bitcoin_block;
         if (data.tsa_receipt) {
           currentCommitment.tsaHex = data.tsa_receipt;
         }
+        currentCommitment.tsa_status = data.tsa_status || currentCommitment.tsa_status;
       }
     } catch(e) {}
   }, 3000);
@@ -2919,6 +2922,11 @@ function buildPSCData(commitment) {
     timestamp: commitment.timestamp,
     visibility: commitment.visibility,
     key: commitment.key,
+    ots_receipt: commitment.otsHex || commitment.ots_receipt || null,
+    ots_status: commitment.ots_status || null,
+    bitcoin_block: commitment.bitcoin_block || null,
+    tsa_receipt: commitment.tsaHex || commitment.tsa_receipt || null,
+    tsa_status: commitment.tsa_status || null,
     created_by: 'psicommit.com',
     _note: 'This is your cryptographic key. Save your original message separately — it is not stored here and cannot be recovered.'
   };
@@ -3049,10 +3057,10 @@ async function downloadCommitmentPSC(commitmentId) {
     context: c.context,
     timestamp: c.committed_at,
     visibility: c.visibility,
-    ots: c.ots_receipt || null,
+    ots_receipt: c.ots_receipt || null,
     bitcoin_block: c.bitcoin_block || null,
     ots_status: c.ots_status,
-    tsa: c.tsa_receipt || null,
+    tsa_receipt: c.tsa_receipt || null,
     tsa_status: c.tsa_status,
     note: 'Secret key not included — retrieve from your original .psc receipt.',
     created_by: 'psicommit.com'
