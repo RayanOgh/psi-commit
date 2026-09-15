@@ -1695,7 +1695,7 @@
         <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="downloadMessage()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:#ff6b6b;border-color:#ff6b6b" id="copy-msg-btn">↓ Save Message (.txt)</button>
           <button class="btn btn-primary" onclick="downloadPSCOnly()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download .psc</button>
-          <button class="btn btn-outline" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem">Copy Text</button>
+          <button class="btn btn-outline" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="copy-text-btn">Copy Text</button>
           <button class="btn btn-outline" onclick="addToWall()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="add-wall-btn">+ Add to Wall</button>
         </div>
         <div style="font-family:var(--mono);font-size:0.62rem;color:var(--muted);margin-top:0.5rem">⏳ Wait a few seconds after committing, then re-download for complete proof data (OTS + TSA receipts included).</div>
@@ -1766,8 +1766,29 @@
         </div>
       </div>
       <div class="field-group">
-        <label class="field-label">Step 2 — Enter the original message to verify</label>
+        <label class="field-label">Step 2 — What are you verifying?</label>
+        <div class="visibility-toggle">
+          <button class="vis-btn active" id="verify-mode-message" onclick="setVerifyMode('message')">✎ Verify a Message</button>
+          <button class="vis-btn" id="verify-mode-file" onclick="setVerifyMode('file')">📎 Verify a File</button>
+        </div>
+      </div>
+      <div class="field-group" id="verify-message-fields">
+        <label class="field-label">Enter the original message to verify</label>
         <textarea id="verify-message" placeholder="Type or paste the original message exactly as it was committed..." style="min-height:80px"></textarea>
+      </div>
+      <div id="verify-file-fields" style="display:none">
+        <div class="field-group">
+          <label class="field-label">Original file</label>
+          <div id="verify-file-drop" class="drop-zone" ondragover="event.preventDefault()" ondrop="handleVerifyFileDrop(event)" onclick="document.getElementById('verify-file-input').click()">
+            <div id="verify-file-label">Drop the original file here<br><span style="font-size:0.65rem;color:#555">or click to browse — hashed locally, never uploaded</span></div>
+          </div>
+          <input type="file" id="verify-file-input" style="display:none" onchange="handleVerifyFile(this.files[0])">
+          <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.5rem;word-break:break-all" id="verify-file-status"></div>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="verify-file-description">File description</label>
+          <textarea id="verify-file-description" placeholder="Auto-filled from the .psc file if available — edit if needed" style="min-height:70px"></textarea>
+        </div>
       </div>
       <button class="btn btn-primary" onclick="verifyCommitment()">Verify Commitment →</button>
       <div class="verify-result" id="verify-result">
@@ -2840,6 +2861,10 @@ async function createCommitment() {
   // Update wall btn visibility
   document.getElementById('add-wall-btn').style.display = commitVisibility === 'public' ? 'inline-flex' : 'none';
 
+  // File commitments have no message to save/copy — swap those buttons out
+  document.getElementById('copy-msg-btn').style.display = commitMode === 'file' ? 'none' : '';
+  document.getElementById('copy-text-btn').textContent = commitMode === 'file' ? 'Copy File Hash' : 'Copy Text';
+
   // Build stamp digest for OTS
   const stampDigest = await buildStampDigest(currentCommitment);
 
@@ -2976,7 +3001,10 @@ function copyDemoCard() {
 
 // ── COPY / DOWNLOAD ──
 function copyCard() {
-  const text = document.getElementById('commitment-card').textContent;
+  // File commitments have no message to copy — copy the file's SHA-256 hash instead.
+  const text = (currentCommitment && currentCommitment.file_hash)
+    ? currentCommitment.file_hash
+    : document.getElementById('commitment-card').textContent;
   navigator.clipboard.writeText(text).then(() => {
     const btn = event.target;
     const orig = btn.textContent;
@@ -3234,6 +3262,12 @@ function parseReceipt() {
     nonce = data.nonce || '';
     id = data.id || '';
     context = (data.context || data.domain || '').replace('psi-commit.v1.', '');
+
+    // File commitments carry file_hash/file_description in the .psc — switch to file mode automatically.
+    if (data.file_hash) {
+      setVerifyMode('file');
+      document.getElementById('verify-file-description').value = data.file_description || '';
+    }
   } catch(e) {
     // Fall back to text receipt format
     const keyMatch = text.match(/SECRET KEY[^\n]*\n([a-f0-9]{64})/i);
@@ -3261,9 +3295,51 @@ function parseReceipt() {
   }
 }
 
+// ── VERIFY MODE (message vs file) ──
+let verifyMode = 'message';
+let verifyFileInfo = null; // { hash, name, size }
+
+function setVerifyMode(mode) {
+  verifyMode = mode;
+  document.getElementById('verify-mode-message').classList.toggle('active', mode === 'message');
+  document.getElementById('verify-mode-file').classList.toggle('active', mode === 'file');
+  document.getElementById('verify-message-fields').style.display = mode === 'message' ? '' : 'none';
+  document.getElementById('verify-file-fields').style.display = mode === 'file' ? '' : 'none';
+}
+
+function handleVerifyFileDrop(e) {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) handleVerifyFile(file);
+}
+
+async function handleVerifyFile(file) {
+  if (!file) return;
+  verifyFileInfo = null;
+  const zone = document.getElementById('verify-file-drop');
+  const labelEl = document.getElementById('verify-file-label');
+  const statusEl = document.getElementById('verify-file-status');
+  zone.classList.remove('loaded');
+  labelEl.textContent = `Hashing ${file.name}...`;
+  statusEl.textContent = '';
+
+  try {
+    // File never leaves the browser — only its SHA-256 digest is used.
+    const buf = await file.arrayBuffer();
+    const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+    const hashHex = bytesToHex(new Uint8Array(hashBuf));
+    verifyFileInfo = { hash: hashHex, name: file.name, size: file.size };
+    zone.classList.add('loaded');
+    labelEl.textContent = `✓ ${file.name} (${formatFileSize(file.size)})`;
+    statusEl.textContent = `SHA-256: ${hashHex}`;
+  } catch (e) {
+    labelEl.innerHTML = 'Drop the original file here<br><span style="font-size:0.65rem;color:#555">or click to browse — hashed locally, never uploaded</span>';
+    statusEl.textContent = 'Failed to hash file — try again.';
+  }
+}
+
 // ── VERIFY ──
 async function verifyCommitment() {
-  const message = document.getElementById('verify-message').value.trim();
   const keyHex = document.getElementById('p-key').value.trim();
   const expectedMac = document.getElementById('p-mac').value.trim();
   const nonce = document.getElementById('p-nonce').value.trim();
@@ -3273,11 +3349,30 @@ async function verifyCommitment() {
   const iconEl = document.getElementById('verify-icon');
   const msgEl = document.getElementById('verify-msg');
 
-  if (!message) {
-    resultEl.className = 'verify-result show invalid';
-    iconEl.textContent = '✗';
-    msgEl.textContent = 'Please enter the original message to verify.';
-    return;
+  let message;
+  if (verifyMode === 'file') {
+    const description = document.getElementById('verify-file-description').value.trim();
+    if (!verifyFileInfo) {
+      resultEl.className = 'verify-result show invalid';
+      iconEl.textContent = '✗';
+      msgEl.textContent = 'Please upload the original file to verify.';
+      return;
+    }
+    if (!description) {
+      resultEl.className = 'verify-result show invalid';
+      iconEl.textContent = '✗';
+      msgEl.textContent = 'Please enter the file description.';
+      return;
+    }
+    message = `FILE_HASH:${verifyFileInfo.hash}\nDESCRIPTION:${description}`;
+  } else {
+    message = document.getElementById('verify-message').value.trim();
+    if (!message) {
+      resultEl.className = 'verify-result show invalid';
+      iconEl.textContent = '✗';
+      msgEl.textContent = 'Please enter the original message to verify.';
+      return;
+    }
   }
 
   if (!keyHex || !expectedMac || !nonce) {
