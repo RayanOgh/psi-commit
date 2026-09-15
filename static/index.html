@@ -1723,7 +1723,15 @@
       <p style="font-size:0.82rem;color:#777;margin-bottom:1.25rem;line-height:1.7">Prove a message matches a commitment using only the receipt. The math runs entirely in your browser — no server, no internet, no trust required.</p>
 
       <div class="field-group">
-        <label class="field-label">Step 1 — Load your receipt</label>
+        <label class="field-label">What are you verifying?</label>
+        <div class="visibility-toggle">
+          <button class="vis-btn active" id="verify-mode-message" onclick="setVerifyMode('message')">✎ Verify a Message</button>
+          <button class="vis-btn" id="verify-mode-file" onclick="setVerifyMode('file')">📎 Verify a File</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Step 1 — Load your receipt<span id="verify-step1-file-suffix" style="display:none"> and file</span></label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.75rem">
           <div>
             <div id="psc-drop-zone" class="drop-zone" ondragover="event.preventDefault()" ondrop="handlePSCDrop(event)" onclick="document.getElementById('psc-file-input').click()">
@@ -1731,12 +1739,23 @@
               <input type="file" id="psc-file-input" accept=".psc,.json" style="display:none" onchange="handlePSCFile(this.files[0])">
             </div>
           </div>
-          <div>
+          <div id="verify-msg-drop-wrap">
             <div id="msg-drop-zone" class="drop-zone" ondragover="event.preventDefault()" ondrop="handleMsgDrop(event)" onclick="document.getElementById('msg-file-input').click()">
               <div id="msg-drop-label">Drop .txt message file<br><span style="font-size:0.65rem;color:#555">or type below</span></div>
               <input type="file" id="msg-file-input" accept=".txt" style="display:none" onchange="handleMsgFile(this.files[0])">
             </div>
           </div>
+          <div id="verify-file-drop-wrap" style="display:none">
+            <div id="verify-file-drop" class="drop-zone" ondragover="event.preventDefault()" ondrop="handleVerifyFileDrop(event)" onclick="document.getElementById('verify-file-input').click()">
+              <div id="verify-file-label">Drop the original file here<br><span style="font-size:0.65rem;color:#555">or click to browse — hashed locally, never uploaded</span></div>
+            </div>
+            <input type="file" id="verify-file-input" style="display:none" onchange="handleVerifyFile(this.files[0])">
+            <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.5rem;word-break:break-all" id="verify-file-status"></div>
+          </div>
+        </div>
+        <div class="field-group" id="verify-file-description-group" style="display:none">
+          <label class="field-label" for="verify-file-description">File description</label>
+          <textarea id="verify-file-description" placeholder="Auto-filled from the .psc file if available — edit if needed" style="min-height:70px"></textarea>
         </div>
         <div style="text-align:center;font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-bottom:0.75rem">— or paste receipt text —</div>
         <textarea id="verify-paste" placeholder="Paste .psc JSON or text receipt here..." style="min-height:80px;font-size:0.78rem" oninput="parseReceipt()"></textarea>
@@ -1765,30 +1784,9 @@
           <input type="text" id="p-context" readonly style="cursor:default;opacity:0.8">
         </div>
       </div>
-      <div class="field-group">
-        <label class="field-label">Step 2 — What are you verifying?</label>
-        <div class="visibility-toggle">
-          <button class="vis-btn active" id="verify-mode-message" onclick="setVerifyMode('message')">✎ Verify a Message</button>
-          <button class="vis-btn" id="verify-mode-file" onclick="setVerifyMode('file')">📎 Verify a File</button>
-        </div>
-      </div>
       <div class="field-group" id="verify-message-fields">
-        <label class="field-label">Enter the original message to verify</label>
+        <label class="field-label">Step 2 — Enter the original message to verify</label>
         <textarea id="verify-message" placeholder="Type or paste the original message exactly as it was committed..." style="min-height:80px"></textarea>
-      </div>
-      <div id="verify-file-fields" style="display:none">
-        <div class="field-group">
-          <label class="field-label">Original file</label>
-          <div id="verify-file-drop" class="drop-zone" ondragover="event.preventDefault()" ondrop="handleVerifyFileDrop(event)" onclick="document.getElementById('verify-file-input').click()">
-            <div id="verify-file-label">Drop the original file here<br><span style="font-size:0.65rem;color:#555">or click to browse — hashed locally, never uploaded</span></div>
-          </div>
-          <input type="file" id="verify-file-input" style="display:none" onchange="handleVerifyFile(this.files[0])">
-          <div style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-top:0.5rem;word-break:break-all" id="verify-file-status"></div>
-        </div>
-        <div class="field-group">
-          <label class="field-label" for="verify-file-description">File description</label>
-          <textarea id="verify-file-description" placeholder="Auto-filled from the .psc file if available — edit if needed" style="min-height:70px"></textarea>
-        </div>
       </div>
       <button class="btn btn-primary" onclick="verifyCommitment()">Verify Commitment →</button>
       <div class="verify-result" id="verify-result">
@@ -3303,8 +3301,11 @@ function setVerifyMode(mode) {
   verifyMode = mode;
   document.getElementById('verify-mode-message').classList.toggle('active', mode === 'message');
   document.getElementById('verify-mode-file').classList.toggle('active', mode === 'file');
+  document.getElementById('verify-msg-drop-wrap').style.display = mode === 'message' ? '' : 'none';
+  document.getElementById('verify-file-drop-wrap').style.display = mode === 'file' ? '' : 'none';
+  document.getElementById('verify-file-description-group').style.display = mode === 'file' ? '' : 'none';
+  document.getElementById('verify-step1-file-suffix').style.display = mode === 'file' ? '' : 'none';
   document.getElementById('verify-message-fields').style.display = mode === 'message' ? '' : 'none';
-  document.getElementById('verify-file-fields').style.display = mode === 'file' ? '' : 'none';
 }
 
 function handleVerifyFileDrop(e) {
