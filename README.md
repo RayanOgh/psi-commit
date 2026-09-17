@@ -185,6 +185,10 @@ A: No. It uses cryptographic commitments but is much simpler than blockchain. Yo
 - **Issues:** https://github.com/RayanOgh/psi-commit/issues
 - **Demo:** https://github.com/RayanOgh/psi-commit/issues/1
 
+## License
+
+Elastic License 2.0 - see LICENSE file
+
 ---
 
 **Made with 🔒 for verifiable decisions**
