@@ -49,6 +49,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-PHBVQHGLL7"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
@@ -1695,6 +1696,7 @@
         <div style="display:flex;gap:0.75rem;margin-top:1.25rem;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="downloadMessage()" style="font-size:0.72rem;padding:0.7rem 1.4rem;background:#ff6b6b;border-color:#ff6b6b" id="copy-msg-btn">↓ Save Message (.txt)</button>
           <button class="btn btn-primary" onclick="downloadPSCOnly()" style="font-size:0.72rem;padding:0.7rem 1.4rem">↓ Download .psc</button>
+          <button class="btn btn-outline" onclick="downloadCourtPDF()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="court-pdf-btn">↓ COURT-READY PDF</button>
           <button class="btn btn-outline" onclick="copyCard()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="copy-text-btn">Copy Text</button>
           <button class="btn btn-outline" onclick="addToWall()" style="font-size:0.72rem;padding:0.7rem 1.4rem" id="add-wall-btn">+ Add to Wall</button>
         </div>
@@ -3400,6 +3402,367 @@ async function verifyCommitment() {
   }
 }
 
+// ── COURT-READY PDF ──
+
+function pdfFormatDateUTC(iso) {
+  if (!iso) return 'Unknown';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 'Unknown';
+  const date = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZone: 'UTC' });
+  return `${date} at ${time} UTC`;
+}
+
+function drawPsiMark(doc, cx, topY, size) {
+  // Geometric Psi (Ψ) mark drawn as vector lines — avoids relying on
+  // Greek-glyph support in jsPDF's standard (WinAnsi-only) fonts.
+  const armSpread = size * 0.42;
+  const joinY = topY + size * 0.38;
+  const bottomY = topY + size;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(size * 0.09);
+  doc.setLineCap('round');
+  doc.line(cx, joinY, cx, bottomY);
+  doc.line(cx, joinY, cx - armSpread, topY);
+  doc.line(cx, joinY, cx + armSpread, topY);
+}
+
+async function getCommitterIdentity(userId) {
+  const empty = { username: null, created_at: null, linked_providers: [], reveal_total: 0, reveal_count: 0, reveal_rate: null };
+  if (!userId) return empty;
+  try {
+    const { data: profile } = await sb.from('profiles').select('username, created_at, linked_providers').eq('id', userId).single();
+    const { data: publicCommits } = await sb.from('commitments').select('revealed').eq('user_id', userId).eq('visibility', 'public');
+    const total = publicCommits?.length || 0;
+    const revealedCount = publicCommits?.filter(c => c.revealed).length || 0;
+    return {
+      username: profile?.username || null,
+      created_at: profile?.created_at || null,
+      linked_providers: profile?.linked_providers || [],
+      reveal_total: total,
+      reveal_count: revealedCount,
+      reveal_rate: total === 0 ? null : Math.round((revealedCount / total) * 100),
+    };
+  } catch (e) {
+    return empty;
+  }
+}
+
+function pdfDataFromCurrentCommitment(c) {
+  return {
+    id: c.id,
+    mac: c.mac,
+    nonce: c.nonce,
+    domain: c.domain,
+    context: c.context,
+    committed_at: c.timestamp,
+    visibility: c.visibility,
+    user_id: currentUser?.id || null,
+    revealed: false,
+    revealed_message: null,
+    ots_receipt: c.otsHex || c.ots_receipt || null,
+    ots_status: c.ots_status || 'pending',
+    bitcoin_block: c.bitcoin_block || null,
+    tsa_receipt: c.tsaHex || c.tsa_receipt || null,
+    tsa_status: c.tsa_status || 'pending',
+    file_hash: c.file_hash || null,
+    file_description: c.file_description || null,
+  };
+}
+
+function pdfDataFromWallItem(item) {
+  const fileInfo = parseFileCommitmentMessage(item.revealed_message);
+  return {
+    id: item.id,
+    mac: item.mac,
+    nonce: item.nonce,
+    domain: item.domain,
+    context: item.context,
+    committed_at: item.committed_at || item.timestamp,
+    visibility: item.visibility,
+    user_id: item.user_id,
+    revealed: !!item.revealed,
+    revealed_message: item.revealed_message || null,
+    ots_receipt: item.ots_receipt || null,
+    ots_status: item.ots_status || 'pending',
+    bitcoin_block: item.bitcoin_block || null,
+    tsa_receipt: item.tsa_receipt || null,
+    tsa_status: item.tsa_status || 'pending',
+    file_hash: fileInfo.file_hash,
+    file_description: fileInfo.file_description,
+  };
+}
+
+function formatOTSStatus(data) {
+  if (data.ots_status === 'confirmed' && data.bitcoin_block) return `Confirmed in Bitcoin block #${data.bitcoin_block}`;
+  if (data.ots_status === 'submitted') return 'Submitted — pending Bitcoin confirmation (typically 1-2 hours)';
+  return 'Pending';
+}
+
+function formatTSAStatus(data) {
+  if (data.tsa_status === 'confirmed') return 'Confirmed — timestamp token received from FreeTSA';
+  if (data.tsa_status === 'failed') return 'Failed — timestamp could not be obtained';
+  return 'Pending';
+}
+
+function renderCourtReadyPDF(data, identity) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+
+  const margin = 54;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const contentWidth = pageWidth - margin * 2;
+  const bottomLimit = pageHeight - 60;
+  const labelWidth = 155;
+
+  let y = margin;
+
+  function ensureSpace(needed) {
+    if (y + needed > bottomLimit) {
+      doc.addPage();
+      y = margin;
+    }
+  }
+
+  function rule() {
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.75);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 14;
+  }
+
+  function heading(text) {
+    ensureSpace(32);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    doc.text(text, margin, y);
+    y += 6;
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.5);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 16;
+  }
+
+  function paragraph(text, opts = {}) {
+    doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+    doc.setFontSize(opts.size || 9.5);
+    doc.setTextColor(0, 0, 0);
+    const lines = doc.splitTextToSize(text, contentWidth);
+    const lh = opts.lineHeight || 13;
+    for (const line of lines) {
+      ensureSpace(lh);
+      doc.text(line, margin, y);
+      y += lh;
+    }
+    y += opts.gap != null ? opts.gap : 8;
+  }
+
+  function keyValue(label, value) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(0, 0, 0);
+    ensureSpace(14);
+    doc.text(label, margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    const valueLines = doc.splitTextToSize(String(value), contentWidth - labelWidth);
+    doc.text(valueLines[0] || '', margin + labelWidth, y);
+    y += 13;
+    for (let i = 1; i < valueLines.length; i++) {
+      ensureSpace(13);
+      doc.text(valueLines[i], margin + labelWidth, y);
+      y += 13;
+    }
+    y += 3;
+  }
+
+  function labeledBlock(label, value, opts = {}) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(0, 0, 0);
+    ensureSpace(14);
+    doc.text(label, margin, y);
+    y += 13;
+    doc.setFont(opts.mono ? 'courier' : 'helvetica', 'normal');
+    doc.setFontSize(opts.mono ? 8 : 9);
+    const lines = doc.splitTextToSize(String(value), contentWidth);
+    const lh = opts.mono ? 11 : 13;
+    for (const line of lines) {
+      ensureSpace(lh);
+      doc.text(line, margin, y);
+      y += lh;
+    }
+    y += 8;
+  }
+
+  function codeBlock(lines) {
+    const lineHeight = 12;
+    const padding = 10;
+    const blockHeight = lines.length * lineHeight + padding * 1.5;
+    ensureSpace(blockHeight + 10);
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, y, contentWidth, blockHeight);
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(0, 0, 0);
+    let ly = y + padding;
+    for (const line of lines) {
+      doc.text(line, margin + padding, ly);
+      ly += lineHeight;
+    }
+    y += blockHeight + 12;
+  }
+
+  // ── HEADER ──
+  drawPsiMark(doc, margin + 12, y, 26);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(0, 0, 0);
+  doc.text('PSI-COMMIT', margin + 36, y + 18);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(80, 80, 80);
+  doc.text('psicommit.com', margin + 36, y + 32);
+  doc.setTextColor(0, 0, 0);
+  y += 46;
+  rule();
+
+  paragraph('CRYPTOGRAPHIC COMMITMENT — COURT-READY VERIFICATION DOCUMENT', { bold: true, size: 13, lineHeight: 16, gap: 6 });
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(9.5);
+  ensureSpace(16);
+  doc.text(`Commitment ID: ${data.id}`, margin, y);
+  y += 18;
+  rule();
+
+  // ── SECTION 1: COMMITMENT DETAILS ──
+  heading('1. COMMITMENT DETAILS');
+  keyValue('Commitment ID:', data.id);
+  keyValue('Date & Time:', pdfFormatDateUTC(data.committed_at));
+  keyValue('Context:', data.context || 'default');
+  keyValue('Visibility:', (data.visibility || 'public').toUpperCase());
+  keyValue('Commitment Type:', data.file_hash ? 'File' : 'Message');
+  y += 8;
+
+  // ── SECTION 2: COMMITTER IDENTITY ──
+  heading('2. COMMITTER IDENTITY');
+  keyValue('PSI-COMMIT Username:', identity.username ? '@' + identity.username : 'Unknown');
+  keyValue('Account Created:', identity.created_at ? pdfFormatDateUTC(identity.created_at) : 'Unknown');
+  keyValue('Reveal Rate:', identity.reveal_rate === null
+    ? 'No public commitments yet'
+    : `${identity.reveal_rate}% (${identity.reveal_count} of ${identity.reveal_total} public commitments revealed)`);
+  const providerLabels = (identity.linked_providers || [])
+    .map(p => { const name = p.provider || p; return name ? name.charAt(0).toUpperCase() + name.slice(1) : name; })
+    .join(', ');
+  keyValue('OAuth Providers Linked:', providerLabels || 'None');
+  y += 8;
+
+  // ── SECTION 3: HOW THIS PROOF WORKS ──
+  heading('3. HOW THIS PROOF WORKS');
+  paragraph('HMAC-SHA256 Commitment. The Message Authentication Code (MAC) shown in Section 5 is a cryptographic HMAC-SHA256 computation over the committer\'s secret key, a domain-separation string, a random nonce, and the exact content of this commitment. Because HMAC-SHA256 is a one-way, collision-resistant function, it is computationally infeasible to find a different message and key that produce the same MAC. This proves the exact content referenced by this document was fixed and sealed no later than the date and time recorded in Section 1, and that it has not been altered since — any change to the content, however small, would produce a completely different MAC.');
+  paragraph('Bitcoin Anchor via OpenTimestamps. A cryptographic digest derived from this commitment was submitted to the OpenTimestamps protocol and anchored into the Bitcoin blockchain (see Section 5 for status and, once confirmed, the Bitcoin block number). The Bitcoin blockchain is a distributed, append-only public ledger maintained by a global network of independent participants; once a transaction is buried under sufficient confirmations, rewriting it would require redoing an infeasible amount of computational work across that entire network. This provides independent, tamper-evident proof that the commitment digest existed at or before the time it was included in that block — a fact anyone can verify using only public Bitcoin data, without trusting PSI-COMMIT.');
+  paragraph('RFC 3161 Timestamp via FreeTSA. In addition to the Bitcoin anchor, the same digest was submitted to FreeTSA, an independent Time-Stamping Authority operating under the RFC 3161 standard. FreeTSA cryptographically signs a timestamp token (see Section 5) attesting that it received and time-stamped this specific digest at a particular moment. Because this timestamp is issued and digitally signed by a third party unaffiliated with PSI-COMMIT, it provides an additional, independently verifiable record of when the commitment was made — corroborating the Bitcoin anchor with a second, faster-issued attestation.');
+  y += 4;
+
+  // ── SECTION 4: CHAIN OF CUSTODY ──
+  heading('4. CHAIN OF CUSTODY');
+  paragraph('The secret key used to compute this commitment was generated locally in the committer\'s web browser and was never transmitted to, or stored on, PSI-COMMIT servers. PSI-COMMIT likewise never received or stored the original message or file underlying this commitment; only the values shown in Section 5 (the MAC, nonce, and associated timestamp proofs) were ever sent to or held by PSI-COMMIT. The original content and secret key remain solely in the committer\'s possession, and are disclosed, if at all, only when the committer chooses to reveal them.');
+  y += 4;
+
+  // ── SECTION 5: CRYPTOGRAPHIC DATA ──
+  heading('5. CRYPTOGRAPHIC DATA');
+  keyValue('MAC (HMAC-SHA256):', data.mac);
+  keyValue('Nonce:', data.nonce);
+  labeledBlock('OTS Receipt (.ots, hex):', data.ots_receipt || 'Not yet available — Bitcoin anchoring in progress', { mono: true });
+  keyValue('OTS Status:', formatOTSStatus(data));
+  labeledBlock('TSA Receipt (.tsr, hex):', data.tsa_receipt || 'Not yet available — RFC 3161 timestamping in progress', { mono: true });
+  keyValue('TSA Status:', formatTSAStatus(data));
+  if (data.bitcoin_block) keyValue('Bitcoin Block:', '#' + data.bitcoin_block);
+  if (data.file_hash) {
+    keyValue('File Hash (SHA-256):', data.file_hash);
+    labeledBlock('File Description:', data.file_description || '(none provided)');
+  }
+  if (!data.revealed) {
+    keyValue('Message:', 'SEALED — content hidden until reveal');
+  } else if (data.file_hash) {
+    keyValue('Message:', 'File commitment — see File Hash and File Description above.');
+  } else {
+    labeledBlock('Message:', data.revealed_message || '');
+  }
+  y += 8;
+
+  // ── SECTION 6: INDEPENDENT VERIFICATION ──
+  heading('6. INDEPENDENT VERIFICATION');
+  paragraph('A. Verifying the HMAC (Python)', { bold: true, gap: 4 });
+  paragraph('Once you separately obtain the original message and secret key from the committer, run the following to confirm they produce the MAC shown in Section 5:');
+  codeBlock([
+    'import hmac, hashlib',
+    '',
+    'key = bytes.fromhex("<secret key, obtained separately from the committer>")',
+    `domain = "${data.domain || ''}".encode()`,
+    `nonce = bytes.fromhex("${data.nonce || ''}")`,
+    'message = "<the message being verified>".encode()',
+    '',
+    'mac = hmac.new(key, domain + nonce + message, hashlib.sha256).hexdigest()',
+    `print(mac == "${data.mac || ''}")  # True confirms the commitment is authentic`,
+  ]);
+  paragraph('B. Verifying the Bitcoin Timestamp', { bold: true, gap: 4 });
+  paragraph('Command line — install the official OpenTimestamps client and verify the .ots file directly:');
+  codeBlock([
+    'pip install opentimestamps-client',
+    `ots verify ${data.id}.ots`,
+  ]);
+  paragraph('Website — visit opentimestamps.org and drag and drop the .ots file and .stamp.txt file (both available for download from PSI-COMMIT) onto the page. It will display the Bitcoin block number and timestamp, confirming this commitment was anchored to the Bitcoin blockchain — independent of PSI-COMMIT.');
+
+  // ── FOOTER (every page) ──
+  const totalPages = doc.internal.getNumberOfPages();
+  const genDate = pdfFormatDateUTC(new Date().toISOString());
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`Generated on ${genDate}`, margin, pageHeight - 30);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 30, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+  }
+
+  doc.save(`PSI-COMMIT-Court-PDF-${(data.mac || data.id).substring(0, 12)}.pdf`);
+}
+
+async function downloadCourtPDF(commitmentId = null) {
+  const btn = event ? event.target : null;
+  const origText = btn ? btn.textContent : null;
+  if (btn) { btn.textContent = 'Generating...'; btn.disabled = true; }
+
+  try {
+    if (!window.jspdf) {
+      alert('PDF library failed to load. Please check your connection and try again.');
+      return;
+    }
+
+    let data;
+    if (commitmentId) {
+      const item = wallItemsMap[commitmentId];
+      if (!item) { alert('Commitment data not found.'); return; }
+      data = pdfDataFromWallItem(item);
+    } else {
+      if (!currentCommitment) return;
+      data = pdfDataFromCurrentCommitment(currentCommitment);
+    }
+
+    const identity = await getCommitterIdentity(data.user_id);
+    renderCourtReadyPDF(data, identity);
+  } catch (e) {
+    alert('Failed to generate PDF: ' + e.message);
+  } finally {
+    if (btn) { btn.textContent = origText; btn.disabled = false; }
+  }
+}
+
 // ── WALL ──
 async function addExistingToWall(commitmentId, btn) {
   if (!currentUser) { openModal(); return; }
@@ -3513,6 +3876,7 @@ function buildWallItem(item, isOwner = false) {
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="downloadCommitmentStamp('${item.id}', '${item.mac}', '${item.committed_at || item.timestamp}')">↓ .stamp.txt</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="exportCommitmentOTS('${item.id}')">↓ .ots</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="exportCommitmentTSA('${item.id}')">↓ .tsr</button>` : ''}
+        ${isOwner && revealed ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:var(--accent2)" onclick="downloadCourtPDF('${item.id}')">↓ COURT-READY PDF</button>` : ''}
         ${isOwner ? `<button class="btn btn-outline" style="font-size:0.65rem;padding:0.4rem 0.9rem;color:#ff6060;border-color:#ff6060" onclick="deleteCommitment('${item.id}')">Delete</button>` : ''}
       </div>
     </div>
