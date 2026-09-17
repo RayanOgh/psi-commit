@@ -29,7 +29,7 @@ setup(
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
-        'License :: OSI Approved :: MIT License',
+        'License :: Other/Proprietary License',
         'Programming Language :: Python :: 3.8',
     ],
     python_requires='>=3.8',
