@@ -26,6 +26,15 @@ def require_admin():
         raise HTTPException(status_code=404, detail="Not found")
 
 
+def _log_background_task_exception(task: asyncio.Task, label: str) -> None:
+    """Done-callback that surfaces exceptions from fire-and-forget asyncio.create_task() calls."""
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        print(f"[{label}] Background task failed: {exc!r}")
+
+
 # ── BACKGROUND OTS POLLER ──
 async def poll_ots_confirmations():
     while True:
@@ -143,8 +152,12 @@ async def post_commitment(data: CommitmentPost):
     await db.insert_commitment(commitment)
     # Use PSC digest for OTS/TSA if provided, otherwise fall back to MAC
     ots_digest = data.psc_digest or None
-    asyncio.create_task(anchor_commitment(data.id, data.mac, timestamp=data.timestamp, psc_digest=ots_digest))
-    asyncio.create_task(anchor_commitment_tsa(data.id, data.mac, timestamp=data.timestamp, psc_digest=ots_digest))
+
+    ots_task = asyncio.create_task(anchor_commitment(data.id, data.mac, timestamp=data.timestamp, psc_digest=ots_digest))
+    ots_task.add_done_callback(lambda t: _log_background_task_exception(t, "OTS"))
+
+    tsa_task = asyncio.create_task(anchor_commitment_tsa(data.id, data.mac, timestamp=data.timestamp, psc_digest=ots_digest))
+    tsa_task.add_done_callback(lambda t: _log_background_task_exception(t, "TSA"))
 
     return {
         "success": True,
