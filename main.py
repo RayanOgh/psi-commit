@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from pydantic import BaseModel
 from typing import Optional
 import os
+import hmac
 import asyncio
 from datetime import datetime
 
@@ -20,9 +21,15 @@ from ots import anchor_commitment, check_ots_status
 from tsa import anchor_commitment_tsa
 
 
-def require_admin():
-    """Check ADMIN_MODE env var. Set ADMIN_MODE=on in Railway to enable admin endpoints."""
-    if os.environ.get("ADMIN_MODE", "off").lower() != "on":
+def require_admin(request: Request) -> None:
+    """
+    Require a valid admin token via the X-Admin-Token header.
+    Set ADMIN_TOKEN in the environment (e.g. Railway) to enable admin endpoints.
+    Uses hmac.compare_digest for a constant-time comparison.
+    """
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    provided = request.headers.get("X-Admin-Token", "")
+    if not expected or not hmac.compare_digest(provided, expected):
         raise HTTPException(status_code=404, detail="Not found")
 
 
@@ -205,12 +212,12 @@ async def get_user_commitments(user_id: str, visibility: Optional[str] = None):
 
 
 @app.get("/api/ots/diagnostics")
-async def ots_diagnostics():
+async def ots_diagnostics(request: Request):
     """
     Run diagnostics on the OTS Bitcoin anchoring system.
     Checks: calendar connectivity, pending/confirmed counts, sample verification.
     """
-    require_admin()
+    require_admin(request)
     from ots import OTS_CALENDARS, submit_to_calendar, build_ots_submit_digest, parse_bitcoin_block, upgrade_ots_file, find_pending_attestations
     import hashlib
 
@@ -333,9 +340,9 @@ async def ots_diagnostics():
 
 
 @app.get("/api/ots/debug/{commitment_id}")
-async def ots_debug(commitment_id: str):
+async def ots_debug(commitment_id: str, request: Request):
     """Deep inspection of a .ots file for debugging."""
-    require_admin()
+    require_admin(request)
     commitment = await db.get_commitment(commitment_id)
     if not commitment:
         raise HTTPException(status_code=404, detail="Not found")
@@ -410,13 +417,13 @@ async def ots_debug(commitment_id: str):
 
 
 @app.post("/api/ots/repair")
-async def ots_repair():
+async def ots_repair(request: Request):
     """
     Repair OTS issues:
     1. Resubmit commitments stuck at 'pending' (never submitted)
     2. Resubmit commitments with malformed .ots files
     """
-    require_admin()
+    require_admin(request)
     from ots import build_ots_submit_digest
     client = get_client()
     results = {"resubmitted": [], "already_ok": [], "errors": []}
