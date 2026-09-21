@@ -122,21 +122,6 @@ async def post_commitment(data: CommitmentPost):
     if existing:
         return {"success": True, "id": data.id, "already_exists": True}
 
-    # Check commitment limit — count unrevealed commitments for this user
-    if data.user_id:
-        client = get_client()
-        result = client.table("commitments") \
-            .select("id", count="exact") \
-            .eq("user_id", data.user_id) \
-            .eq("revealed", False) \
-            .execute()
-        unrevealed_count = result.count or 0
-        if unrevealed_count >= COMMITMENT_LIMIT:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Commitment limit reached. You have {unrevealed_count} unrevealed commitments. Reveal some before making new ones. (Limit: {COMMITMENT_LIMIT})"
-            )
-
     commitment = {
         "id": data.id,
         "mac": data.mac,
@@ -156,7 +141,14 @@ async def post_commitment(data: CommitmentPost):
         "tsa_receipt": None,
     }
 
-    await db.insert_commitment(commitment)
+    # Count-and-insert happens atomically in Postgres (insert_commitment_with_limit),
+    # so concurrent requests can't slip past COMMITMENT_LIMIT.
+    result = await db.insert_commitment_with_limit(commitment, COMMITMENT_LIMIT)
+    if not result["inserted"]:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Commitment limit reached. You have {result['unrevealed_count']} unrevealed commitments. Reveal some before making new ones. (Limit: {COMMITMENT_LIMIT})"
+        )
     # Use PSC digest for OTS/TSA if provided, otherwise fall back to MAC
     ots_digest = data.psc_digest or None
 
@@ -465,11 +457,12 @@ async def ots_repair(request: Request):
                     "ots_receipt": None,
                 }).eq("id", c["id"]).execute()
 
-                asyncio.create_task(anchor_commitment(
+                repair_task = asyncio.create_task(anchor_commitment(
                     c["id"], c["mac"],
                     timestamp=c.get("committed_at", ""),
                     psc_digest=c.get("ots_digest")
                 ))
+                repair_task.add_done_callback(lambda t: _log_background_task_exception(t, "OTS-repair"))
                 results["resubmitted"].append(c["id"])
 
         except Exception as e:

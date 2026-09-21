@@ -28,6 +28,19 @@ class Database:
         result = client.table("commitments").insert(commitment).execute()
         return result.data[0] if result.data else {}
 
+    async def insert_commitment_with_limit(self, commitment: dict, limit: int) -> dict:
+        """
+        Atomically enforce the per-user unrevealed-commitment limit and insert.
+        Calls the insert_commitment_with_limit Postgres function, which returns
+        {"inserted": bool, "unrevealed_count": int}.
+        """
+        client = get_client()
+        result = client.rpc(
+            "insert_commitment_with_limit",
+            {"p_commitment": commitment, "p_limit": limit},
+        ).execute()
+        return result.data
+
     async def get_commitment(self, commitment_id: str) -> Optional[dict]:
         """Fetch a single commitment by ID."""
         client = get_client()
