@@ -64,6 +64,32 @@ is_valid = verify("My prediction here", key, commitment)
 # Returns: True
 ```
 
+### Verify a Receipt Offline
+`verify_psc.py` checks a `.psc` receipt using only the Python standard library. It makes no network requests and does not need psicommit.com.
+
+```bash
+# Message commitment
+python verify_psc.py receipt.psc --message "The S&P 500 will close above 5000 on Friday"
+
+# File commitment (hash the file, or pass a SHA-256 you already have)
+python verify_psc.py receipt.psc --file original.pdf
+python verify_psc.py receipt.psc --file-hash <sha256-hex>
+```
+
+It recomputes `HMAC-SHA256(key, domain || nonce || message)` and compares it to the receipt's MAC (exit code 0 if it matches, 1 if not). It also rebuilds the stamp text, prints its SHA-256, and writes three files next to the receipt:
+
+- `<name>.stamp.txt` and `<name>.stamp.txt.ots`: drop both on [opentimestamps.org](https://opentimestamps.org) to check the Bitcoin anchor. A proof that is still pending will not fully verify until it is confirmed in a block.
+- `<name>.tsr`: the RFC 3161 timestamp token. Check it against the stamp digest with OpenSSL, using the FreeTSA certificates:
+
+```bash
+curl -O https://freetsa.org/files/cacert.pem
+curl -O https://freetsa.org/files/tsa.crt
+openssl ts -verify -digest <stamp-sha256> -in <name>.tsr -CAfile cacert.pem -untrusted tsa.crt
+# Verification: OK
+```
+
+The script prints this command with the digest filled in.
+
 ## Features
 
 ### ✅ Cryptographically Secure
@@ -157,7 +183,9 @@ psi-commit/
 │   ├── log.py            # Append-only hash-chained log
 │   └── timestamp.py      # OpenTimestamps integration
 ├── tests/
-│   └── test_properties.py
+│   ├── test_properties.py
+│   └── test_verify_psc.py
+├── verify_psc.py         # Standalone offline receipt verifier
 ├── SPECIFICATION.md      # Technical specification
 ├── SECURITY.md           # Threat model
 ├── setup.py
